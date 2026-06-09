@@ -12,6 +12,9 @@ import session from 'koa-session2';
 import passport from 'koa-passport';
 import { loginRouter, authRouter } from './auth';
 import lineContentRouter from './lineContent';
+import issueApiRouter from './issueTable/api';
+import lineLoginRouter from './issueTable/lineLogin';
+import { startScrapeWorker } from './lib/scraper/worker';
 
 const app = new Koa();
 const router = Router();
@@ -42,6 +45,13 @@ router.use(
   lineContentRouter.routes(),
   lineContentRouter.allowedMethods()
 );
+
+router.use('/api/issues', issueApiRouter.routes(), issueApiRouter.allowedMethods());
+router.use('/', lineLoginRouter.routes(), lineLoginRouter.allowedMethods());
+
+router.get('/issues', (ctx) => {
+  ctx.redirect('/liff/issues.html');
+});
 
 if (process.env.NODE_ENV === 'production') {
   app.use(
@@ -82,6 +92,8 @@ app.listen(process.env.PORT, () => {
   // eslint-disable-next-line no-console
   console.log('Listening port', process.env.PORT);
 });
+
+startScrapeWorker();
 
 // Graceful shutdown
 // https://pm2.keymetrics.io/docs/usage/cluster-mode/#graceful-shutdown

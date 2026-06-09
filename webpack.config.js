@@ -43,6 +43,7 @@ module.exports = {
   entry: {
     index: './src/liff/index.js',
     redirect: './src/liff/redirect.js',
+    issueTable: './src/issueTable/index.js',
   },
   resolve: {
     alias: {
@@ -143,6 +144,12 @@ module.exports = {
       chunks: ['redirect'],
       // custom constants passed to index.html via htmlWebpackPlugin.options
       GTM_ID: process.env.GTM_ID,
+    }),
+    new HtmlWebpackPlugin({
+      inject: true,
+      template: './src/issueTable/index.html',
+      filename: 'issues.html',
+      chunks: ['issueTable'],
     }),
     new CompressionPlugin(),
     new DefinePlugin({

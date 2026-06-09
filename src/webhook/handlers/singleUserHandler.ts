@@ -30,6 +30,7 @@ import {
   setReplyTokenCollectorMsg,
   getRedisBatchKey,
 } from './utils';
+import { upsertFromMessage } from 'src/lib/issueService';
 
 const userIdBlacklist = (process.env.USERID_BLACKLIST || '').split(',');
 
@@ -369,6 +370,11 @@ const singleUserHandler = async (
           )
         );
       }
+
+      // Fire-and-forget: record message as an issue for the investigation dashboard
+      upsertFromMessage(trimmedInput, userId).catch((err) => {
+        console.error('[IssueService] Failed to upsert issue:', err);
+      });
 
       // The user forwarded us an new message.
       //

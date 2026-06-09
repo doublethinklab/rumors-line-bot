@@ -22,6 +22,7 @@
     "clean:server": "rm -rf build",
     "clean:liff": "rm -rf liff",
     "notify": "babel-node --extensions .ts,.js -r dotenv/config src/scripts/scanRepliesAndNotify.js",
+    "analyze-topics": "babel-node --extensions .ts,.js -r dotenv/config src/scripts/analyzeTopics.ts",
     "cofactsapi": "babel-node --extensions .ts,.js -r dotenv/config src/scripts/introspectCofactsApi.js",
     "postcofactsapi": "npm run typegen",
     "storybook": "start-storybook -p 6006",
@@ -46,6 +47,7 @@
   },
   "homepage": "https://github.com/cofacts/rumors-line-bot#readme",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.102.0",
     "@babel/preset-typescript": "^7.21.0",
     "@google-cloud/bigquery": "^6.2.0",
     "@google-cloud/dialogflow": "^3.3.0",
