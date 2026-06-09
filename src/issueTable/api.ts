@@ -3,6 +3,7 @@ import getRawBody from 'raw-body';
 import Issue, { IssueStatus, Investigator } from 'src/database/models/issue';
 import Account, { AccountStatus } from 'src/database/models/account';
 import { syncAllIssues } from 'src/lib/sheets';
+import { upsertFromMessage } from 'src/lib/issueService';
 
 const router = new Router();
 
@@ -33,6 +34,36 @@ router.get('/me', requireAuth, (ctx: any) => {
 router.get('/issues', requireAuth, async (ctx) => {
   const issues = await Issue.findAll();
   ctx.body = issues;
+});
+
+// Analyst manually submits an observation (URL or text)
+router.post('/issues', requireAuth, async (ctx: any) => {
+  const body = await parseJsonBody(ctx);
+  const { content, notes } = body as { content?: string; notes?: string };
+
+  if (!content || !content.trim()) {
+    ctx.status = 400;
+    ctx.body = { error: 'content is required' };
+    return;
+  }
+
+  const session: InvestigatorSession = ctx.session.investigator;
+  const issue = await upsertFromMessage(content.trim(), session.userId);
+
+  // Attach analyst note if provided
+  if (notes?.trim() && issue._id) {
+    const col = await (
+      await import('src/database/mongoClient')
+    ).default.getInstance().then((c: any) => c.collection('issues'));
+    await col.updateOne(
+      { _id: issue._id },
+      { $set: { analystNotes: notes.trim(), updatedAt: new Date() } }
+    );
+    issue.analystNotes = notes.trim();
+  }
+
+  ctx.status = 201;
+  ctx.body = issue;
 });
 
 router.patch('/issues/:id/status', requireAuth, async (ctx: any) => {

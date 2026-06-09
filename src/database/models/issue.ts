@@ -31,6 +31,8 @@ export interface IssueDocument {
   isUnknownSite?: boolean;
   defangedUrl?: string;
   accountDiscontinued?: boolean; // true when account was already known+discontinued
+  // analyst-submitted notes
+  analystNotes?: string;
   // scraping fields
   scrapeStatus?: ScrapeStatus;
   scrapedText?: string;

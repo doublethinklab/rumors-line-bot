@@ -106,6 +106,11 @@
     <span class="time">{formatDate(issue.createdAt)}</span>
   </div>
 
+  <!-- Analyst notes (shown when present) -->
+  {#if issue.analystNotes}
+    <p class="analyst-notes">{issue.analystNotes}</p>
+  {/if}
+
   <!-- AI summary (shown when available) -->
   {#if issue.aiSummary}
     <details class="summary-block">
@@ -302,5 +307,17 @@
     font-size: 11px;
     color: #e74c3c;
     margin: 0 0 8px;
+  }
+
+  .analyst-notes {
+    font-size: 12px;
+    color: #555;
+    background: #fffbe6;
+    border-left: 3px solid #f5a623;
+    border-radius: 0 4px 4px 0;
+    padding: 5px 8px;
+    margin: 0 0 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 </style>

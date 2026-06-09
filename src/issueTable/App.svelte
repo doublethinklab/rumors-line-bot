@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import Column from './components/Column.svelte';
   import AccountsView from './components/AccountsView.svelte';
+  import NewIssueModal from './components/NewIssueModal.svelte';
 
   let issues = [];
   let accounts = [];
@@ -9,6 +10,7 @@
   let loading = true;
   let error = null;
   let activeTab = 'board'; // 'board' | 'accounts'
+  let showNewIssueModal = false;
 
   let pollInterval;
 
@@ -86,13 +88,23 @@
       </nav>
     </div>
 
-    {#if currentUser}
-      <div class="user">
-        <img src={currentUser.pictureUrl} alt={currentUser.name} class="user-avatar" />
-        <span>{currentUser.name}</span>
-      </div>
-    {/if}
+    <div class="header-right">
+      {#if currentUser}
+        <button class="btn-new" on:click={() => (showNewIssueModal = true)}>
+          ＋ 新增議題
+        </button>
+        <div class="user">
+          <img src={currentUser.pictureUrl} alt={currentUser.name} class="user-avatar" />
+          <span>{currentUser.name}</span>
+        </div>
+      {/if}
+    </div>
   </header>
+
+  <NewIssueModal
+    bind:open={showNewIssueModal}
+    on:created={loadAll}
+  />
 
   {#if loading}
     <p class="status">載入中…</p>
@@ -185,6 +197,26 @@
     border-radius: 10px;
     padding: 1px 6px;
   }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .btn-new {
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+    background: #1a73e8;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-new:hover { background: #1558b0; }
 
   .user {
     display: flex;
