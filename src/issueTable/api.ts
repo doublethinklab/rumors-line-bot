@@ -2,6 +2,7 @@ import Router from 'koa-router';
 import getRawBody from 'raw-body';
 import Issue, { IssueStatus, Investigator } from 'src/database/models/issue';
 import Account, { AccountStatus } from 'src/database/models/account';
+import { syncAllIssues } from 'src/lib/sheets';
 
 const router = new Router();
 
@@ -51,6 +52,11 @@ router.patch('/issues/:id/status', requireAuth, async (ctx: any) => {
     return;
   }
   ctx.body = issue;
+
+  // Fire-and-forget full sync to keep sheet state current
+  Issue.findAll()
+    .then((all) => syncAllIssues(all))
+    .catch((err) => console.error('[sheets] Sync failed:', err));
 });
 
 router.post('/issues/:id/investigators', requireAuth, async (ctx: any) => {

@@ -3,6 +3,7 @@ import Issue, { IssueDocument } from 'src/database/models/issue';
 import Account from 'src/database/models/account';
 import { extractUrls, parseUrl } from './urlParser';
 import { scrapeQueue } from './queues';
+import { appendIssueRow } from './sheets';
 
 const SIMILARITY_THRESHOLD = 0.7;
 
@@ -81,6 +82,10 @@ async function upsertFromLink(
     await scrapeQueue.add({ issueId: String(newIssue._id) }, { delay: 2000 });
   }
 
+  appendIssueRow(newIssue).catch((err) =>
+    console.error('[sheets] Failed to append link issue:', err)
+  );
+
   return newIssue;
 }
 
@@ -104,5 +109,11 @@ async function upsertFromText(
     }
   }
 
-  return Issue.createText(text, reporterUserId);
+  const newIssue = await Issue.createText(text, reporterUserId);
+
+  appendIssueRow(newIssue).catch((err) =>
+    console.error('[sheets] Failed to append text issue:', err)
+  );
+
+  return newIssue;
 }
