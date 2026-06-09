@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
 
   export let accounts = [];
+  export let isAdmin = false;
 
   const dispatch = createEventDispatcher();
 
@@ -104,14 +105,18 @@
                 <span class="notes-text">{account.notes ?? '—'}</span>
               {/if}
             </td>
-            <td class="actions-cell">
-              {#if editingId === String(account._id)}
-                <button class="btn-save" on:click={() => saveEdit(account)}>儲存</button>
-                <button class="btn-cancel" on:click={cancelEdit}>取消</button>
-              {:else}
-                <button class="btn-edit" on:click={() => startEdit(account)}>編輯</button>
-              {/if}
-            </td>
+            {#if isAdmin}
+              <td class="actions-cell">
+                {#if editingId === String(account._id)}
+                  <button class="btn-save" on:click={() => saveEdit(account)}>儲存</button>
+                  <button class="btn-cancel" on:click={cancelEdit}>取消</button>
+                {:else}
+                  <button class="btn-edit" on:click={() => startEdit(account)}>編輯</button>
+                {/if}
+              </td>
+            {:else}
+              <td></td>
+            {/if}
           </tr>
         {/each}
       </tbody>

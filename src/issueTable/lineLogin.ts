@@ -5,7 +5,7 @@ import querystring from 'querystring';
 
 const router = new Router();
 
-router.get('/issues-login', (ctx: any) => {
+router.get('/issues-line-login', (ctx: any) => {
   const state = crypto.randomBytes(16).toString('hex');
   ctx.session.oauthState = state;
 
@@ -70,8 +70,17 @@ router.get('/issues-authcallback', async (ctx: any) => {
     userId: profile.userId,
     name: profile.displayName,
     pictureUrl: profile.pictureUrl,
+    loginMethod: 'line',
+    role: 'viewer',
   };
 
+  ctx.redirect('/issues');
+});
+
+router.get('/issues-logout', (ctx: any) => {
+  ctx.session.investigator = undefined;
+  ctx.session.oauthState = undefined;
+  ctx.session.googleOauthState = undefined;
   ctx.redirect('/issues');
 });
 

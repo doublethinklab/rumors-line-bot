@@ -47,8 +47,9 @@
     dispatch('update');
   }
 
-  $: isClaimed = currentUser && issue.investigators.some(inv => inv.userId === currentUser.userId);
-  $: canClaim = currentUser && !isClaimed && issue.investigators.length < 5;
+  $: isAdmin = currentUser?.role === 'admin';
+  $: isClaimed = isAdmin && issue.investigators.some(inv => inv.userId === currentUser.userId);
+  $: canClaim = isAdmin && !isClaimed && issue.investigators.length < 5;
   $: isLink = issue.inputType === 'link';
   $: platformColor = PLATFORM_COLOR[issue.platform] ?? '#888';
 
@@ -131,7 +132,7 @@
     </div>
   {/if}
 
-  {#if currentUser}
+  {#if isAdmin}
     <div class="actions">
       {#if isClaimed}
         <button class="btn btn-secondary" on:click={toggleClaim}>取消認領</button>

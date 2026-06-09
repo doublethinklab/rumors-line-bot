@@ -22,6 +22,20 @@ function requireAuth(ctx: any, next: () => Promise<void>) {
   return next();
 }
 
+function requireAdmin(ctx: any, next: () => Promise<void>) {
+  if (!ctx.session.investigator) {
+    ctx.status = 401;
+    ctx.body = { error: 'Unauthorized' };
+    return;
+  }
+  if (ctx.session.investigator.role !== 'admin') {
+    ctx.status = 403;
+    ctx.body = { error: 'Admin permission required' };
+    return;
+  }
+  return next();
+}
+
 async function parseJsonBody(ctx: any): Promise<any> {
   const raw = await getRawBody(ctx.req, { encoding: 'utf-8' });
   return raw ? JSON.parse(raw) : {};
@@ -36,8 +50,8 @@ router.get('/issues', requireAuth, async (ctx) => {
   ctx.body = issues;
 });
 
-// Analyst manually submits an observation (URL or text)
-router.post('/issues', requireAuth, async (ctx: any) => {
+// Analyst manually submits an observation (URL or text) — admin only
+router.post('/issues', requireAdmin, async (ctx: any) => {
   const body = await parseJsonBody(ctx);
   const { content, notes } = body as { content?: string; notes?: string };
 
@@ -66,7 +80,7 @@ router.post('/issues', requireAuth, async (ctx: any) => {
   ctx.body = issue;
 });
 
-router.patch('/issues/:id/status', requireAuth, async (ctx: any) => {
+router.patch('/issues/:id/status', requireAdmin, async (ctx: any) => {
   const body = await parseJsonBody(ctx);
   const { status } = body as { status: IssueStatus };
 
@@ -90,7 +104,7 @@ router.patch('/issues/:id/status', requireAuth, async (ctx: any) => {
     .catch((err) => console.error('[sheets] Sync failed:', err));
 });
 
-router.post('/issues/:id/investigators', requireAuth, async (ctx: any) => {
+router.post('/issues/:id/investigators', requireAdmin, async (ctx: any) => {
   const session: InvestigatorSession = ctx.session.investigator;
   const investigator: Investigator = {
     userId: session.userId,
@@ -108,7 +122,7 @@ router.post('/issues/:id/investigators', requireAuth, async (ctx: any) => {
   ctx.body = issue;
 });
 
-router.delete('/issues/:id/investigators', requireAuth, async (ctx: any) => {
+router.delete('/issues/:id/investigators', requireAdmin, async (ctx: any) => {
   const session: InvestigatorSession = ctx.session.investigator;
   const issue = await Issue.removeInvestigator(ctx.params.id, session.userId);
   if (!issue) {
@@ -126,7 +140,7 @@ router.get('/accounts', requireAuth, async (ctx) => {
   ctx.body = accounts;
 });
 
-router.patch('/accounts/:id', requireAuth, async (ctx: any) => {
+router.patch('/accounts/:id', requireAdmin, async (ctx: any) => {
   const body = await parseJsonBody(ctx);
   const { status, notes } = body as { status?: AccountStatus; notes?: string };
 
@@ -150,7 +164,7 @@ router.patch('/accounts/:id', requireAuth, async (ctx: any) => {
 });
 
 // Issues belonging to a specific account
-router.get('/accounts/:id/issues', requireAuth, async (ctx: any) => {
+router.get('/accounts/:id/issues', requireAdmin, async (ctx: any) => {
   const account = await Account.findById(ctx.params.id);
   if (!account) {
     ctx.status = 404;

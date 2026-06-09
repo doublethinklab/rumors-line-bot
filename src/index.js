@@ -14,6 +14,7 @@ import { loginRouter, authRouter } from './auth';
 import lineContentRouter from './lineContent';
 import issueApiRouter from './issueTable/api';
 import lineLoginRouter from './issueTable/lineLogin';
+import googleLoginRouter from './issueTable/googleLogin';
 import { startScrapeWorker } from './lib/scraper/worker';
 
 const app = new Koa();
@@ -48,6 +49,7 @@ router.use(
 
 router.use('/api/issues', issueApiRouter.routes(), issueApiRouter.allowedMethods());
 router.use('/', lineLoginRouter.routes(), lineLoginRouter.allowedMethods());
+router.use('/', googleLoginRouter.routes(), googleLoginRouter.allowedMethods());
 
 router.get('/issues', (ctx) => {
   ctx.redirect('/liff/issues.html');
