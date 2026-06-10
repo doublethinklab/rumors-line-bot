@@ -49,6 +49,7 @@ export async function appendIssueRow(issue: IssueDocument): Promise<void> {
     spreadsheetId: SPREADSHEET_ID,
     range: `${SHEET.ISSUES}!A:J`,
     valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
     requestBody: { values: [row] },
   });
 }
