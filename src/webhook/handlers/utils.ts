@@ -354,20 +354,20 @@ export function createArticleShareBubble(articleUrl: string): FlexBubble {
           style: 'primary',
           color: '#ffb600',
         },
-        {
-          type: 'button',
-          action: {
-            type: 'uri',
-            label: t`Share on Facebook`,
-            uri: `https://www.facebook.com/dialog/share?openExternalBrowser=1&app_id=${
-              process.env.FACEBOOK_APP_ID
-            }&display=popup&hashtag=${encodeURIComponent(
-              `#${/* t: Facebook hash tag */ t`ReportedToCofacts`}`
-            )}&href=${encodeURIComponent(articleUrl)}`,
-          },
-          style: 'primary',
-          color: '#ffb600',
-        },
+        // {
+        //   type: 'button',
+        //   action: {
+        //     type: 'uri',
+        //     label: t`Share on Facebook`,
+        //     uri: `https://www.facebook.com/dialog/share?openExternalBrowser=1&app_id=${
+        //       process.env.FACEBOOK_APP_ID
+        //     }&display=popup&hashtag=${encodeURIComponent(
+        //       `#${/* t: Facebook hash tag */ t`ReportedToCofacts`}`
+        //     )}&href=${encodeURIComponent(articleUrl)}`,
+        //   },
+        //   style: 'primary',
+        //   color: '#ffb600',
+        // },
       ],
     },
   };
