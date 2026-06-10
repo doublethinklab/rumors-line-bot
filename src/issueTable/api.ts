@@ -2,6 +2,7 @@ import Router from 'koa-router';
 import getRawBody from 'raw-body';
 import Issue, { IssueStatus, Investigator } from 'src/database/models/issue';
 import Account, { AccountStatus } from 'src/database/models/account';
+import LineUser, { LineUserRole } from 'src/database/models/lineUser';
 import { syncAllIssues } from 'src/lib/sheets';
 import { upsertFromMessage } from 'src/lib/issueService';
 
@@ -11,6 +12,7 @@ interface InvestigatorSession {
   userId: string;
   name: string;
   pictureUrl: string;
+  role: string;
 }
 
 function requireAuth(ctx: any, next: () => Promise<void>) {
@@ -31,6 +33,21 @@ function requireAdmin(ctx: any, next: () => Promise<void>) {
   if (ctx.session.investigator.role !== 'admin') {
     ctx.status = 403;
     ctx.body = { error: 'Admin permission required' };
+    return;
+  }
+  return next();
+}
+
+function requireEditor(ctx: any, next: () => Promise<void>) {
+  if (!ctx.session.investigator) {
+    ctx.status = 401;
+    ctx.body = { error: 'Unauthorized' };
+    return;
+  }
+  const role = ctx.session.investigator.role;
+  if (role !== 'admin' && role !== 'editor') {
+    ctx.status = 403;
+    ctx.body = { error: 'Editor permission required' };
     return;
   }
   return next();
@@ -80,11 +97,13 @@ router.post('/issues', requireAdmin, async (ctx: any) => {
   ctx.body = issue;
 });
 
+const VALID_STATUSES: IssueStatus[] = ['new', 'processing', 'resolved', 'cofacts_resolved'];
+
 router.patch('/issues/:id/status', requireAdmin, async (ctx: any) => {
   const body = await parseJsonBody(ctx);
   const { status } = body as { status: IssueStatus };
 
-  if (!['new', 'processing', 'resolved'].includes(status)) {
+  if (!VALID_STATUSES.includes(status)) {
     ctx.status = 400;
     ctx.body = { error: 'Invalid status' };
     return;
@@ -104,7 +123,7 @@ router.patch('/issues/:id/status', requireAdmin, async (ctx: any) => {
     .catch((err) => console.error('[sheets] Sync failed:', err));
 });
 
-router.post('/issues/:id/investigators', requireAdmin, async (ctx: any) => {
+router.post('/issues/:id/investigators', requireEditor, async (ctx: any) => {
   const session: InvestigatorSession = ctx.session.investigator;
   const investigator: Investigator = {
     userId: session.userId,
@@ -122,7 +141,7 @@ router.post('/issues/:id/investigators', requireAdmin, async (ctx: any) => {
   ctx.body = issue;
 });
 
-router.delete('/issues/:id/investigators', requireAdmin, async (ctx: any) => {
+router.delete('/issues/:id/investigators', requireEditor, async (ctx: any) => {
   const session: InvestigatorSession = ctx.session.investigator;
   const issue = await Issue.removeInvestigator(ctx.params.id, session.userId);
   if (!issue) {
@@ -176,6 +195,32 @@ router.get('/accounts/:id/issues', requireAdmin, async (ctx: any) => {
     (i) =>
       i.platform === account.platform && i.accountHandle === account.handle
   );
+});
+
+// ── LINE Users (investigator list) ────────────────────────────────────────────
+
+router.get('/line-users', requireAdmin, async (ctx) => {
+  const users = await LineUser.findAll();
+  ctx.body = users;
+});
+
+router.patch('/line-users/:userId', requireAdmin, async (ctx: any) => {
+  const body = await parseJsonBody(ctx);
+  const { role } = body as { role?: LineUserRole };
+
+  if (!role || !['viewer', 'editor'].includes(role)) {
+    ctx.status = 400;
+    ctx.body = { error: 'Invalid role' };
+    return;
+  }
+
+  const user = await LineUser.updateRole(ctx.params.userId, role);
+  if (!user) {
+    ctx.status = 404;
+    ctx.body = { error: 'User not found' };
+    return;
+  }
+  ctx.body = user;
 });
 
 export default router;

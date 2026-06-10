@@ -6,8 +6,18 @@
 
   const dispatch = createEventDispatcher();
 
-  const NEXT_STATUS = { new: 'processing', processing: 'resolved', resolved: 'new' };
-  const NEXT_LABEL = { new: '移至處理中', processing: '標記已處理', resolved: '重新開啟' };
+  const NEXT_STATUS = {
+    new: 'processing',
+    processing: 'resolved',
+    resolved: 'new',
+    cofacts_resolved: 'new',
+  };
+  const NEXT_LABEL = {
+    new: '移至處理中',
+    processing: '標記已處理',
+    resolved: '重新開啟',
+    cofacts_resolved: '重新開啟',
+  };
 
   const PLATFORM_LABEL = {
     facebook: 'Facebook',
@@ -29,6 +39,8 @@
     unknown: '#e67e22',
   };
 
+  let showInvestigators = false;
+
   async function changeStatus() {
     await fetch(`/api/issues/${issue._id}/status`, {
       method: 'PATCH',
@@ -47,9 +59,16 @@
     dispatch('update');
   }
 
+  function onDragStart(e) {
+    e.dataTransfer.setData('issueId', String(issue._id));
+    e.dataTransfer.setData('issueStatus', issue.status);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
   $: isAdmin = currentUser?.role === 'admin';
-  $: isClaimed = isAdmin && issue.investigators.some(inv => inv.userId === currentUser.userId);
-  $: canClaim = isAdmin && !isClaimed && issue.investigators.length < 5;
+  $: canInteract = currentUser?.role === 'admin' || currentUser?.role === 'editor';
+  $: isClaimed = canInteract && issue.investigators.some(inv => inv.userId === currentUser.userId);
+  $: canClaim = canInteract && !isClaimed && issue.investigators.length < 5;
   $: isLink = issue.inputType === 'link';
   $: platformColor = PLATFORM_COLOR[issue.platform] ?? '#888';
 
@@ -70,7 +89,11 @@
   }
 </script>
 
-<div class="card">
+<div
+  class="card"
+  draggable={isAdmin}
+  on:dragstart={onDragStart}
+>
   <!-- Platform badge for link-type issues -->
   {#if isLink}
     <div class="platform-row">
@@ -103,9 +126,31 @@
 
   <div class="meta">
     <span class="badge">回報 {issue.reporterIds.length} 人</span>
-    <span class="badge">調查員 {issue.investigators.length}/5</span>
+    <button
+      class="badge badge-btn"
+      class:has-investigators={issue.investigators.length > 0}
+      on:click={() => (showInvestigators = !showInvestigators)}
+      title="點擊查看認領調查員"
+    >
+      認領 {issue.investigators.length}/5
+    </button>
     <span class="time">{formatDate(issue.createdAt)}</span>
   </div>
+
+  {#if showInvestigators}
+    <div class="investigators-popover">
+      {#if issue.investigators.length === 0}
+        <span class="no-inv">尚無認領</span>
+      {:else}
+        {#each issue.investigators as inv}
+          <div class="inv-row">
+            <img src={inv.pictureUrl} alt={inv.name} class="avatar" />
+            <span class="inv-name">{inv.name}</span>
+          </div>
+        {/each}
+      {/if}
+    </div>
+  {/if}
 
   <!-- Analyst notes (shown when present) -->
   {#if issue.analystNotes}
@@ -124,22 +169,16 @@
     <p class="scrape-failed">無法擷取內容</p>
   {/if}
 
-  {#if issue.investigators.length > 0}
-    <div class="investigators">
-      {#each issue.investigators as inv}
-        <img src={inv.pictureUrl} alt={inv.name} title={inv.name} class="avatar" />
-      {/each}
-    </div>
-  {/if}
-
-  {#if isAdmin}
+  {#if canInteract}
     <div class="actions">
       {#if isClaimed}
         <button class="btn btn-secondary" on:click={toggleClaim}>取消認領</button>
       {:else if canClaim}
         <button class="btn btn-primary" on:click={toggleClaim}>認領調查</button>
       {/if}
-      <button class="btn btn-move" on:click={changeStatus}>{NEXT_LABEL[issue.status]}</button>
+      {#if isAdmin}
+        <button class="btn btn-move" on:click={changeStatus}>{NEXT_LABEL[issue.status]}</button>
+      {/if}
     </div>
   {/if}
 </div>
@@ -151,7 +190,10 @@
     padding: 12px 14px;
     margin-bottom: 10px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    cursor: grab;
   }
+
+  .card:active { cursor: grabbing; }
 
   .platform-row {
     display: flex;
@@ -240,16 +282,43 @@
     color: #555;
   }
 
+  .badge-btn {
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .badge-btn.has-investigators {
+    background: #e8f0fe;
+    color: #1a73e8;
+  }
+
+  .badge-btn:hover {
+    background: #d2e3fc;
+    color: #1558b0;
+  }
+
   .time {
     font-size: 11px;
     color: #999;
     margin-left: auto;
   }
 
-  .investigators {
-    display: flex;
-    gap: 4px;
+  .investigators-popover {
+    background: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 8px 10px;
     margin-bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .inv-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .avatar {
@@ -257,6 +326,17 @@
     height: 24px;
     border-radius: 50%;
     object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .inv-name {
+    font-size: 12px;
+    color: #333;
+  }
+
+  .no-inv {
+    font-size: 12px;
+    color: #aaa;
   }
 
   .actions {

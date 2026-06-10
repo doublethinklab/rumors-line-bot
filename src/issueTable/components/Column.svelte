@@ -3,13 +3,49 @@
   import IssueCard from './IssueCard.svelte';
 
   export let title;
+  export let status;
   export let issues;
   export let currentUser;
 
   const dispatch = createEventDispatcher();
+
+  let isDragOver = false;
+
+  function onDragOver(e) {
+    e.preventDefault();
+    isDragOver = true;
+  }
+
+  function onDragLeave(e) {
+    // Only clear when leaving the column area, not child elements
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      isDragOver = false;
+    }
+  }
+
+  async function onDrop(e) {
+    e.preventDefault();
+    isDragOver = false;
+    const issueId = e.dataTransfer.getData('issueId');
+    const fromStatus = e.dataTransfer.getData('issueStatus');
+    if (!issueId || fromStatus === status) return;
+
+    await fetch(`/api/issues/${issueId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    dispatch('update');
+  }
 </script>
 
-<div class="column">
+<div
+  class="column"
+  class:drag-over={isDragOver}
+  on:dragover={onDragOver}
+  on:dragleave={onDragLeave}
+  on:drop={onDrop}
+>
   <div class="column-header">
     <span class="column-title">{title}</span>
     <span class="count">{issues.length}</span>
@@ -37,6 +73,12 @@
     display: flex;
     flex-direction: column;
     gap: 0;
+    transition: background 0.15s, outline 0.15s;
+  }
+
+  .column.drag-over {
+    background: #dce8fb;
+    outline: 2px dashed #1a73e8;
   }
 
   .column-header {

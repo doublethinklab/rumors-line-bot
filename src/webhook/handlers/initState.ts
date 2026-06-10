@@ -20,6 +20,7 @@ import {
   displayLoadingAnimation,
 } from './utils';
 import choosingArticle from './choosingArticle';
+import Issue from 'src/database/models/issue';
 
 const SIMILARITY_THRESHOLD = 0.95;
 
@@ -80,6 +81,11 @@ const initState = async ({
   const inputSummary = ellipsis(input, 12);
 
   if (result.edges.length) {
+    // Auto-resolve any open issues this user reported, since Cofacts found a match
+    Issue.markCofactsResolvedForUser(userId).catch((err) =>
+      console.error('[issue] markCofactsResolvedForUser failed:', err)
+    );
+
     // Track if find similar Articles in DB.
     visitor.event({ ec: 'UserInput', ea: 'ArticleSearch', el: 'ArticleFound' });
 

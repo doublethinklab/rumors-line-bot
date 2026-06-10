@@ -2,7 +2,7 @@ import { ObjectId } from 'mongodb';
 import mongoClient from '../mongoClient';
 import type { Platform } from 'src/lib/urlParser';
 
-export type IssueStatus = 'new' | 'processing' | 'resolved';
+export type IssueStatus = 'new' | 'processing' | 'resolved' | 'cofacts_resolved';
 export type InputType = 'text' | 'link';
 
 export interface Investigator {
@@ -193,6 +193,14 @@ const Issue = {
         { returnOriginal: false }
       )
     ).value;
+  },
+
+  async markCofactsResolvedForUser(userId: string): Promise<void> {
+    const col = await getCollection();
+    await col.updateMany(
+      { reporterIds: userId, status: { $in: ['new', 'processing'] } },
+      { $set: { status: 'cofacts_resolved', updatedAt: new Date() } }
+    );
   },
 };
 

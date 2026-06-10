@@ -2,6 +2,7 @@ import Router from 'koa-router';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
 import querystring from 'querystring';
+import LineUser from 'src/database/models/lineUser';
 
 const router = new Router();
 
@@ -71,12 +72,18 @@ router.get('/issues-authcallback', async (ctx: any) => {
     pictureUrl: string;
   };
 
+  const lineUser = await LineUser.upsert(
+    profile.userId,
+    profile.displayName,
+    profile.pictureUrl
+  );
+
   ctx.session.investigator = {
     userId: profile.userId,
     name: profile.displayName,
     pictureUrl: profile.pictureUrl,
     loginMethod: 'line',
-    role: 'viewer',
+    role: lineUser.role,
   };
 
   ctx.redirect('/issues');
