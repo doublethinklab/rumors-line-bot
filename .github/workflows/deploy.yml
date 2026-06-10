@@ -42,6 +42,8 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
@@ -49,10 +51,12 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ env.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Push env file
+      - name: Push config and env files
         env:
           PROD_ENV: ${{ secrets.PROD_ENV }}
         run: |
+          scp -i ~/.ssh/deploy_key docker-compose.yml \
+            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:${{ env.DEPLOY_DIR }}/docker-compose.yml
           echo "$PROD_ENV" | ssh -i ~/.ssh/deploy_key \
             ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
             "cat > ${{ env.DEPLOY_DIR }}/.env"
