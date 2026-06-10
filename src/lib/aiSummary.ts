@@ -1,6 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
+import fetch from 'node-fetch';
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  fetch: fetch as unknown as typeof globalThis.fetch,
+});
 
 const SYSTEM_PROMPT = `You are an analyst assistant at a disinformation research lab.
 Given scraped content from a social media post or web page, produce a concise briefing in Traditional Chinese (繁體中文) with:
