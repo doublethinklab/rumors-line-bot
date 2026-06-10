@@ -21,7 +21,7 @@ const COLLECTION = 'accounts';
 
 async function getCollection() {
   const client = await mongoClient.getInstance();
-  const col = client.collection(COLLECTION);
+  const col = await client.collection(COLLECTION);
   // Unique index on (platform, handle)
   await col.createIndex({ platform: 1, handle: 1 }, { unique: true });
   return col;

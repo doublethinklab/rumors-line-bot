@@ -44,7 +44,7 @@ const COLLECTION = 'issues';
 
 async function getCollection() {
   const client = await mongoClient.getInstance();
-  return client.collection(COLLECTION);
+  return await client.collection(COLLECTION);
 }
 
 const Issue = {

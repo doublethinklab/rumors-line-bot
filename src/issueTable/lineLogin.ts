@@ -21,7 +21,10 @@ router.get('/issues-line-login', (ctx: any) => {
 });
 
 router.get('/issues-authcallback', async (ctx: any) => {
+  try {
   const { code, state } = ctx.query as { code: string; state: string };
+
+  console.log('[lineLogin] callback state:', state, 'session:', JSON.stringify(ctx.session));
 
   if (!state || state !== ctx.session.oauthState) {
     ctx.status = 400;
@@ -43,8 +46,10 @@ router.get('/issues-authcallback', async (ctx: any) => {
   });
 
   if (!tokenRes.ok) {
-    ctx.status = 502;
-    ctx.body = 'Failed to obtain access token from LINE';
+    const errBody = await tokenRes.text();
+    console.error('[lineLogin] token error:', tokenRes.status, errBody);
+    ctx.status = 400;
+    ctx.body = `LINE token error: ${errBody}`;
     return;
   }
 
@@ -55,7 +60,7 @@ router.get('/issues-authcallback', async (ctx: any) => {
   });
 
   if (!profileRes.ok) {
-    ctx.status = 502;
+    ctx.status = 400;
     ctx.body = 'Failed to fetch LINE profile';
     return;
   }
@@ -75,6 +80,11 @@ router.get('/issues-authcallback', async (ctx: any) => {
   };
 
   ctx.redirect('/issues');
+  } catch (err) {
+    console.error('[lineLogin] callback error:', err);
+    ctx.status = 500;
+    ctx.body = 'Internal error during LINE login';
+  }
 });
 
 router.get('/issues-logout', (ctx: any) => {
