@@ -5,6 +5,7 @@ export type Platform =
   | 'youtube'
   | 'tiktok'
   | 'threads'
+  | 'weibo'
   | 'unknown';
 
 export interface ParsedUrl {
@@ -12,7 +13,6 @@ export interface ParsedUrl {
   platform: Platform;
   accountHandle: string | null;
   isUnknownSite: boolean;
-  defangedUrl: string | null;
 }
 
 const URL_REGEX = /https?:\/\/[^\s　，、・。！？」』】〕]+/gi;
@@ -35,14 +35,14 @@ const KNOWN_HOSTS: Record<string, Platform> = {
   'vm.tiktok.com': 'tiktok',
   'threads.net': 'threads',
   'www.threads.net': 'threads',
+  'weibo.com': 'weibo',
+  'www.weibo.com': 'weibo',
+  'weibo.cn': 'weibo',
+  'm.weibo.cn': 'weibo',
 };
 
 export function extractUrls(text: string): string[] {
   return text.match(URL_REGEX) ?? [];
-}
-
-export function defangUrl(url: string): string {
-  return url.replace(/\./g, '[.]');
 }
 
 export function parseUrl(rawUrl: string): ParsedUrl {
@@ -55,7 +55,6 @@ export function parseUrl(rawUrl: string): ParsedUrl {
       platform: 'unknown',
       accountHandle: null,
       isUnknownSite: true,
-      defangedUrl: defangUrl(rawUrl),
     };
   }
 
@@ -68,7 +67,6 @@ export function parseUrl(rawUrl: string): ParsedUrl {
       platform: 'unknown',
       accountHandle: null,
       isUnknownSite: true,
-      defangedUrl: defangUrl(rawUrl),
     };
   }
 
@@ -78,7 +76,6 @@ export function parseUrl(rawUrl: string): ParsedUrl {
 
   switch (platform) {
     case 'facebook':
-      // facebook.com/<page>/posts/<id> or facebook.com/profile.php?id=...
       if (url.searchParams.get('id')) {
         accountHandle = `id:${url.searchParams.get('id')}`;
       } else if (parts[0] && parts[0] !== 'watch' && parts[0] !== 'groups') {
@@ -87,21 +84,18 @@ export function parseUrl(rawUrl: string): ParsedUrl {
       break;
 
     case 'twitter':
-      // x.com/<account>/status/<id>
       if (parts[0] && parts[0] !== 'i') {
         accountHandle = `@${parts[0]}`;
       }
       break;
 
     case 'instagram':
-      // instagram.com/<account>/ or instagram.com/p/<id>/ or instagram.com/reel/<id>/
       if (parts[0] && !['p', 'reel', 'stories', 'explore'].includes(parts[0])) {
         accountHandle = `@${parts[0]}`;
       }
       break;
 
     case 'youtube':
-      // youtube.com/@handle or youtube.com/channel/<id> or youtube.com/c/<name>
       if (parts[0]?.startsWith('@')) {
         accountHandle = parts[0];
       } else if (parts[0] === 'channel' && parts[1]) {
@@ -114,15 +108,19 @@ export function parseUrl(rawUrl: string): ParsedUrl {
       break;
 
     case 'tiktok':
-      // tiktok.com/@<account>/video/<id>
       if (parts[0]?.startsWith('@')) {
         accountHandle = parts[0];
       }
       break;
 
     case 'threads':
-      // threads.net/@<account>/post/<id>
       if (parts[0]?.startsWith('@')) {
+        accountHandle = parts[0];
+      }
+      break;
+
+    case 'weibo':
+      if (parts[0] && !['p', 'status', 'tv'].includes(parts[0])) {
         accountHandle = parts[0];
       }
       break;
@@ -133,6 +131,5 @@ export function parseUrl(rawUrl: string): ParsedUrl {
     platform,
     accountHandle,
     isUnknownSite: false,
-    defangedUrl: null,
   };
 }

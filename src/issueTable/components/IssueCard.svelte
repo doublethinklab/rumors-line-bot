@@ -26,6 +26,7 @@
     youtube: 'YouTube',
     tiktok: 'TikTok',
     threads: 'Threads',
+    weibo: '微博',
     unknown: '未知網站',
   };
 
@@ -36,6 +37,7 @@
     youtube: '#ff0000',
     tiktok: '#010101',
     threads: '#000',
+    weibo: '#e6162d',
     unknown: '#e67e22',
   };
 
@@ -65,6 +67,15 @@
     e.dataTransfer.effectAllowed = 'move';
   }
 
+  function openWithWarning(url) {
+    const confirmed = window.confirm(
+      '安全提醒\n\n此連結可能含有風險，請確認您信任此來源後再繼續。\n\n前往：' + url
+    );
+    if (confirmed) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }
+
   $: isAdmin = currentUser?.role === 'admin';
   $: canInteract = currentUser?.role === 'admin' || currentUser?.role === 'editor';
   $: isClaimed = canInteract && issue.investigators.some(inv => inv.userId === currentUser.userId);
@@ -91,6 +102,7 @@
 
 <div
   class="card"
+  class:unsafe={issue.isUnsafe}
   draggable={isAdmin}
   on:dragstart={onDragStart}
 >
@@ -103,7 +115,9 @@
       {#if issue.accountHandle}
         <span class="account">{issue.accountHandle}</span>
       {/if}
-      {#if issue.accountDiscontinued}
+      {#if issue.isUnsafe}
+        <span class="unsafe-flag">危險連結</span>
+      {:else if issue.accountDiscontinued}
         <span class="discontinued-flag">帳號停止追蹤</span>
       {:else if issue.isUnknownSite}
         <span class="unknown-flag">待審查</span>
@@ -113,13 +127,13 @@
 
   <!-- Message text / URL display -->
   {#if isLink}
-    {#if issue.isUnknownSite}
-      <p class="text defanged" title={issue.canonicalText}>{issue.defangedUrl}</p>
-    {:else}
-      <a class="text link" href={issue.canonicalText} target="_blank" rel="noopener noreferrer">
-        {shortUrl(issue.canonicalText)}
-      </a>
-    {/if}
+    <button
+      class="text link-btn"
+      title={issue.canonicalText}
+      on:click={() => openWithWarning(issue.canonicalText)}
+    >
+      {shortUrl(issue.canonicalText)}
+    </button>
   {:else}
     <p class="text">{issue.canonicalText}</p>
   {/if}
@@ -195,6 +209,11 @@
 
   .card:active { cursor: grabbing; }
 
+  .card.unsafe {
+    border-left: 3px solid #e74c3c;
+    background: #fff8f8;
+  }
+
   .platform-row {
     display: flex;
     align-items: center;
@@ -235,6 +254,16 @@
     margin-left: auto;
   }
 
+  .unsafe-flag {
+    font-size: 11px;
+    background: #c0392b;
+    color: #fff;
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-left: auto;
+    font-weight: 600;
+  }
+
   .text {
     font-size: 14px;
     line-height: 1.5;
@@ -247,24 +276,26 @@
     -webkit-box-orient: vertical;
   }
 
-  a.text.link {
-    color: #1a73e8;
-    text-decoration: none;
+  .link-btn {
     display: block;
+    width: 100%;
+    text-align: left;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0 0 8px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #1a73e8;
+    cursor: pointer;
+    word-break: break-all;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: inherit;
   }
 
-  a.text.link:hover {
-    text-decoration: underline;
-  }
-
-  .defanged {
-    font-family: monospace;
-    font-size: 12px;
-    color: #e67e22;
-    background: #fff8e1;
-    border-radius: 4px;
-    padding: 4px 6px;
-  }
+  .link-btn:hover { text-decoration: underline; }
 
   .meta {
     display: flex;

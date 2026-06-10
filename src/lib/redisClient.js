@@ -93,6 +93,22 @@ function range(key, start, end) {
   });
 }
 
+function setex(key, ttlSeconds, value) {
+  if (typeof key !== 'string') {
+    throw new Error('key of `setex(key, ttl, value)` must be a string.');
+  }
+  return new Promise((resolve, reject) => {
+    client.set(key, JSON.stringify(value), 'EX', ttlSeconds, (err, reply) => {
+      /* istanbul ignore if */
+      if (err) {
+        reject(err);
+      } else {
+        resolve(reply);
+      }
+    });
+  });
+}
+
 function quit() {
   return new Promise((resolve, reject) => {
     client.quit((err) => {
@@ -108,6 +124,7 @@ function quit() {
 
 export default {
   set,
+  setex,
   get,
   del,
   push,

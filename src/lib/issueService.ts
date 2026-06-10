@@ -2,6 +2,7 @@ import stringSimilarity from 'string-similarity';
 import Issue, { IssueDocument } from 'src/database/models/issue';
 import Account from 'src/database/models/account';
 import { extractUrls, parseUrl } from './urlParser';
+import { checkUrlSafety } from './urlSafety';
 import { scrapeQueue } from './queues';
 import { appendIssueRow } from './sheets';
 
@@ -33,7 +34,13 @@ async function upsertFromLink(
 
   const parsed = parseUrl(rawUrl);
 
-  // 2. Resolve account record (upsert) when we have a known platform + handle
+  // 2. Safety check (whitelisted sites skip the API call)
+  const safety = await checkUrlSafety(rawUrl).catch((err) => {
+    console.error('[issueService] URL safety check failed:', err);
+    return { safe: true, whitelisted: false }; // Fail open
+  });
+
+  // 3. Resolve account record for known social platforms
   let accountId: import('mongodb').ObjectId | undefined;
   let accountDiscontinued = false;
 
@@ -45,12 +52,11 @@ async function upsertFromLink(
     accountId = account._id;
 
     if (!isNew && account.status === 'discontinued') {
-      // Account already flagged by an analyst — note the submission but skip scraping
       accountDiscontinued = true;
     }
   }
 
-  // 3. Same account already has an issue — bump reporter count on that issue
+  // 4. Same account already has an issue — bump reporter count
   if (!parsed.isUnknownSite && parsed.platform && parsed.accountHandle) {
     const sameAccount = await Issue.findByAccount(
       parsed.platform,
@@ -62,8 +68,10 @@ async function upsertFromLink(
     }
   }
 
-  // 4. New link — create issue and conditionally enqueue scrape
-  const shouldScrape = !parsed.isUnknownSite && !accountDiscontinued;
+  // 5. Create new issue
+  // Scrape when: not discontinued AND URL is safe (both known platforms and whitelisted/safe unknown sites)
+  const shouldScrape = !accountDiscontinued && safety.safe;
+
   const newIssue = await Issue.createLink(
     {
       canonicalText: rawUrl,
@@ -71,9 +79,9 @@ async function upsertFromLink(
       accountHandle: parsed.accountHandle ?? undefined,
       accountId,
       isUnknownSite: parsed.isUnknownSite,
-      defangedUrl: parsed.defangedUrl ?? undefined,
       accountDiscontinued,
       scrapeStatus: shouldScrape ? 'pending' : undefined,
+      isUnsafe: !safety.safe ? true : undefined,
     },
     reporterUserId
   );

@@ -18,8 +18,9 @@ export async function scrapeIssue(issue: IssueDocument): Promise<ScrapeResult> {
     scrapedText = await scrapeYouTube(url);
   }
 
-  // Fall back to generic web scrape for non-social or if platform scrape failed
-  if (!scrapedText && issue.platform !== 'tiktok' && !issue.isUnknownSite) {
+  // Fall back to generic web scrape when platform scrape failed or for safe unknown sites
+  // TikTok is excluded (scraping is blocked), unsafe URLs are never scraped
+  if (!scrapedText && issue.platform !== 'tiktok' && !issue.isUnsafe) {
     scrapedText = await scrapeWebPage(url);
   }
 

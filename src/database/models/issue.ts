@@ -29,8 +29,9 @@ export interface IssueDocument {
   accountHandle?: string;
   accountId?: ObjectId;      // ref to accounts collection
   isUnknownSite?: boolean;
-  defangedUrl?: string;
+  defangedUrl?: string;      // legacy field — no longer written to new issues
   accountDiscontinued?: boolean; // true when account was already known+discontinued
+  isUnsafe?: boolean;        // true when URL failed safety checks
   // analyst-submitted notes
   analystNotes?: string;
   // scraping fields
@@ -97,9 +98,9 @@ const Issue = {
       | 'accountHandle'
       | 'accountId'
       | 'isUnknownSite'
-      | 'defangedUrl'
       | 'accountDiscontinued'
       | 'scrapeStatus'
+      | 'isUnsafe'
     >,
     reporterUserId: string
   ): Promise<IssueDocument> {
