@@ -2,7 +2,6 @@ import ua from 'universal-analytics';
 import type { EventParams } from 'universal-analytics';
 import { gaTitle } from './sharedUtils';
 import { insertEventBatch } from './bq';
-import type { EventBatch } from 'src/rumors-db/bq/events';
 import rollbar from './rollbar';
 
 /**
@@ -33,7 +32,7 @@ export default function ga(
 
   visitor.set('cd1', messageSource);
 
-  let events: EventBatch['events'] = [];
+  let events: unknown[] = [];
   const extra: Record<string, unknown> = {};
 
   const visitorToReturn = {
