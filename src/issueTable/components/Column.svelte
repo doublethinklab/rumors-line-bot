@@ -28,11 +28,11 @@
   }
 
   async function onDrop(e) {
-    if (!canDrop) return;
     e.preventDefault();
     isDragOver = false;
-    const issueId = e.dataTransfer.getData('issueId');
-    const fromStatus = e.dataTransfer.getData('issueStatus');
+    if (!canDrop) return;
+    const raw = e.dataTransfer.getData('text/plain');
+    const [issueId, fromStatus] = raw.split('|');
     if (!issueId || fromStatus === status) return;
 
     await fetch(`/api/issues/${issueId}/status`, {

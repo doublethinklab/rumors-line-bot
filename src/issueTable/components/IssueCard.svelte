@@ -121,8 +121,8 @@
   }
 
   function onDragStart(e) {
-    e.dataTransfer.setData('issueId', String(issue._id));
-    e.dataTransfer.setData('issueStatus', issue.status);
+    // Use text/plain — Safari only supports text/plain and text/uri-list
+    e.dataTransfer.setData('text/plain', String(issue._id) + '|' + issue.status);
     e.dataTransfer.effectAllowed = 'move';
   }
 
