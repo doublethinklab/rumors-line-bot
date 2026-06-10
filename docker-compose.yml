@@ -23,7 +23,7 @@ services:
 
   app:
     container_name: rumors-line-bot
-    image: rumors-line-bot
+    image: ${APP_IMAGE:-doublethinklab/ohub_linebot:latest}
     depends_on:
       - mongo-container
       - redis
