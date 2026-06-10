@@ -58,7 +58,12 @@ jobs:
             "cat > ${{ env.DEPLOY_DIR }}/.env"
 
       - name: Pull image and restart app
+        env:
+          DOCKER_PAT: ${{ secrets.DOCKER_PAT }}
         run: |
+          echo "$DOCKER_PAT" | ssh -i ~/.ssh/deploy_key \
+            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
+            "docker login -u andy4096 --password-stdin"
           ssh -i ~/.ssh/deploy_key \
             ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
             "docker pull ${{ env.IMAGE }}:${{ github.sha }} && \
