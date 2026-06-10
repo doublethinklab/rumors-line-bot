@@ -6,48 +6,89 @@
 
   const dispatch = createEventDispatcher();
 
-  const NEXT_STATUS = {
-    new: 'processing',
+  const STATUS_ACTIONS = {
     processing: 'resolved',
     resolved: 'new',
     cofacts_resolved: 'new',
   };
-  const NEXT_LABEL = {
-    new: '移至處理中',
+  const STATUS_ACTION_LABELS = {
     processing: '標記已處理',
     resolved: '重新開啟',
     cofacts_resolved: '重新開啟',
   };
 
-  const PLATFORM_LABEL = {
-    facebook: 'Facebook',
-    twitter: 'X / Twitter',
-    instagram: 'Instagram',
-    youtube: 'YouTube',
-    tiktok: 'TikTok',
-    threads: 'Threads',
-    weibo: '微博',
-    unknown: '未知網站',
-  };
+  const SOCIAL_PLATFORMS = new Set([
+    'facebook',
+    'twitter',
+    'instagram',
+    'youtube',
+    'tiktok',
+    'threads',
+    'weibo',
+  ]);
 
-  const PLATFORM_COLOR = {
-    facebook: '#1877f2',
-    twitter: '#000',
-    instagram: '#e1306c',
-    youtube: '#ff0000',
-    tiktok: '#010101',
-    threads: '#000',
-    weibo: '#e6162d',
-    unknown: '#e67e22',
+  const SOCIAL_HOSTS = new Set([
+    'facebook.com', 'www.facebook.com', 'fb.com', 'fb.watch', 'm.facebook.com', 'l.facebook.com',
+    'twitter.com', 'www.twitter.com', 'x.com', 'www.x.com', 'mobile.twitter.com',
+    'instagram.com', 'www.instagram.com',
+    'youtube.com', 'www.youtube.com', 'youtu.be', 'm.youtube.com',
+    'tiktok.com', 'www.tiktok.com', 'vm.tiktok.com',
+    'threads.net', 'www.threads.net',
+    'weibo.com', 'www.weibo.com', 'weibo.cn', 'm.weibo.cn',
+    'linkedin.com', 'www.linkedin.com',
+    'dcard.tw', 'www.dcard.tw',
+    'ptt.cc', 'www.ptt.cc', 'disp.cc',
+    'line.me', 'liff.line.me',
+  ]);
+
+  const NEWS_HOSTS = new Set([
+    'udn.com', 'www.udn.com',
+    'ltn.com.tw', 'news.ltn.com.tw', 'www.ltn.com.tw',
+    'chinatimes.com', 'www.chinatimes.com',
+    'ettoday.net', 'www.ettoday.net',
+    'setn.com', 'www.setn.com',
+    'tvbs.com.tw', 'news.tvbs.com.tw', 'www.tvbs.com.tw',
+    'cts.com.tw', 'news.cts.com.tw', 'www.cts.com.tw',
+    'pts.org.tw', 'news.pts.org.tw', 'www.pts.org.tw',
+    'cna.com.tw', 'www.cna.com.tw',
+    'storm.mg', 'www.storm.mg',
+    'newtalk.tw', 'www.newtalk.tw',
+    'today.line.me',
+    'yahoo.com', 'tw.yahoo.com', 'tw.news.yahoo.com',
+    'pchome.com.tw', 'www.pchome.com.tw',
+    'nownews.com', 'www.nownews.com',
+    'mirrormedia.mg', 'www.mirrormedia.mg',
+    'businessweekly.com.tw', 'www.businessweekly.com.tw',
+    'wealth.com.tw', 'www.wealth.com.tw',
+    'commonwealthmag.com', 'www.commonwealthmag.com',
+    'bnext.com.tw', 'www.bnext.com.tw',
+    'technews.tw', 'technews.com.tw',
+    'ithome.com.tw', 'www.ithome.com.tw',
+    'inside.com.tw', 'www.inside.com.tw',
+    'thenewslens.com', 'www.thenewslens.com',
+    'twreporter.org', 'www.twreporter.org',
+    'cw.com.tw', 'www.cw.com.tw',
+  ]);
+
+  const CATEGORY_META = {
+    social: { label: '社群網站', color: '#2563eb' },
+    news: { label: '新聞網站', color: '#047857' },
+    unknown: { label: '未知網站', color: '#e67e22' },
+    text: { label: '純文字', color: '#6b7280' },
+    image: { label: '圖片', color: '#7c3aed' },
   };
 
   let showInvestigators = false;
+  let commentText = '';
+  let isCommentSubmitting = false;
 
   async function changeStatus() {
+    if (!STATUS_ACTIONS[issue.status]) return;
+
     await fetch(`/api/issues/${issue._id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: NEXT_STATUS[issue.status] }),
+      body: JSON.stringify({ status: STATUS_ACTIONS[issue.status] }),
     });
     dispatch('update');
   }
@@ -59,6 +100,24 @@
       await fetch(`/api/issues/${issue._id}/investigators`, { method: 'POST' });
     }
     dispatch('update');
+  }
+
+  async function submitComment() {
+    const text = commentText.trim();
+    if (!text || isCommentSubmitting) return;
+
+    isCommentSubmitting = true;
+    const res = await fetch(`/api/issues/${issue._id}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    isCommentSubmitting = false;
+
+    if (res.ok) {
+      commentText = '';
+      dispatch('update');
+    }
   }
 
   function onDragStart(e) {
@@ -81,7 +140,10 @@
   $: isClaimed = canInteract && issue.investigators.some(inv => inv.userId === currentUser.userId);
   $: canClaim = canInteract && !isClaimed && issue.investigators.length < 5;
   $: isLink = issue.inputType === 'link';
-  $: platformColor = PLATFORM_COLOR[issue.platform] ?? '#888';
+  $: category = getIssueCategory(issue);
+  $: categoryMeta = CATEGORY_META[category] ?? CATEGORY_META.unknown;
+  $: comments = issue.comments ?? [];
+  $: canSubmitComment = commentText.trim().length > 0 && !isCommentSubmitting;
 
   function formatDate(dateStr) {
     return new Date(dateStr).toLocaleString('zh-TW', {
@@ -98,20 +160,35 @@
       return url.slice(0, 40);
     }
   }
+
+  function getIssueCategory(issue) {
+    if (issue.inputType === 'image') return 'image';
+    if (issue.inputType !== 'link') return 'text';
+    if (SOCIAL_PLATFORMS.has(issue.platform)) return 'social';
+
+    try {
+      const hostname = new URL(issue.canonicalText).hostname.toLowerCase();
+      if (SOCIAL_HOSTS.has(hostname)) return 'social';
+      return NEWS_HOSTS.has(hostname) ? 'news' : 'unknown';
+    } catch {
+      return 'unknown';
+    }
+  }
 </script>
 
 <div
   class="card"
   class:unsafe={issue.isUnsafe}
-  draggable={isAdmin}
+  class:draggable={canInteract}
+  draggable={canInteract}
   on:dragstart={onDragStart}
 >
-  <!-- Platform badge for link-type issues -->
-  {#if isLink}
-    <div class="platform-row">
-      <span class="platform-badge" style="background:{platformColor}">
-        {PLATFORM_LABEL[issue.platform] ?? issue.platform}
-      </span>
+  <!-- Content category badge -->
+  <div class="category-row">
+    <span class="category-badge" style="background:{categoryMeta.color}">
+      {categoryMeta.label}
+    </span>
+    {#if isLink}
       {#if issue.accountHandle}
         <span class="account">{issue.accountHandle}</span>
       {/if}
@@ -122,8 +199,8 @@
       {:else if issue.isUnknownSite}
         <span class="unknown-flag">待審查</span>
       {/if}
-    </div>
-  {/if}
+    {/if}
+  </div>
 
   <!-- Message text / URL display -->
   {#if isLink}
@@ -183,6 +260,48 @@
     <p class="scrape-failed">無法擷取內容</p>
   {/if}
 
+  {#if comments.length > 0 || canInteract}
+    <div class="comments">
+      {#if comments.length > 0}
+        <div class="comment-list">
+          {#each comments as comment}
+            <div class="comment">
+              <img src={comment.pictureUrl} alt={comment.name} class="comment-avatar" />
+              <div class="comment-body">
+                <div class="comment-meta">
+                  <span class="comment-name">{comment.name}</span>
+                  <span class="comment-time">{formatDate(comment.createdAt)}</span>
+                </div>
+                <p class="comment-text">{comment.text}</p>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+      {#if canInteract}
+        <form class="comment-form" on:submit|preventDefault={submitComment}>
+          <textarea
+            bind:value={commentText}
+            class="comment-input"
+            rows="2"
+            placeholder="留言…"
+            disabled={isCommentSubmitting}
+            on:mousedown|stopPropagation
+            on:dragstart|stopPropagation
+          />
+          <button
+            type="submit"
+            class="comment-submit"
+            disabled={!canSubmitComment}
+            on:mousedown|stopPropagation
+          >
+            送出
+          </button>
+        </form>
+      {/if}
+    </div>
+  {/if}
+
   {#if canInteract}
     <div class="actions">
       {#if isClaimed}
@@ -190,8 +309,8 @@
       {:else if canClaim}
         <button class="btn btn-primary" on:click={toggleClaim}>認領調查</button>
       {/if}
-      {#if isAdmin}
-        <button class="btn btn-move" on:click={changeStatus}>{NEXT_LABEL[issue.status]}</button>
+      {#if isAdmin && STATUS_ACTIONS[issue.status]}
+        <button class="btn btn-move" on:click={changeStatus}>{STATUS_ACTION_LABELS[issue.status]}</button>
       {/if}
     </div>
   {/if}
@@ -204,24 +323,27 @@
     padding: 12px 14px;
     margin-bottom: 10px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  }
+
+  .card.draggable {
     cursor: grab;
   }
 
-  .card:active { cursor: grabbing; }
+  .card.draggable:active { cursor: grabbing; }
 
   .card.unsafe {
     border-left: 3px solid #e74c3c;
     background: #fff8f8;
   }
 
-  .platform-row {
+  .category-row {
     display: flex;
     align-items: center;
     gap: 6px;
     margin-bottom: 6px;
   }
 
-  .platform-badge {
+  .category-badge {
     font-size: 10px;
     font-weight: 600;
     color: #fff;
@@ -373,6 +495,101 @@
   .actions {
     display: flex;
     gap: 6px;
+  }
+
+  .comments {
+    margin-bottom: 8px;
+  }
+
+  .comment-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .comment {
+    display: flex;
+    gap: 8px;
+  }
+
+  .comment-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .comment-body {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .comment-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+
+  .comment-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: #555;
+  }
+
+  .comment-time {
+    font-size: 10px;
+    color: #aaa;
+  }
+
+  .comment-text {
+    font-size: 12px;
+    line-height: 1.45;
+    color: #333;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .comment-form {
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+  }
+
+  .comment-input {
+    flex: 1;
+    min-width: 0;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.4;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 5px 7px;
+  }
+
+  .comment-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+  }
+
+  .comment-submit {
+    font-size: 12px;
+    padding: 5px 9px;
+    border-radius: 4px;
+    border: none;
+    background: #1a73e8;
+    color: #fff;
+    cursor: pointer;
+  }
+
+  .comment-submit:disabled {
+    background: #ddd;
+    color: #888;
+    cursor: not-allowed;
   }
 
   .btn {

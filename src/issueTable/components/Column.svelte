@@ -11,7 +11,11 @@
 
   let isDragOver = false;
 
+  $: canInteract = currentUser?.role === 'admin' || currentUser?.role === 'editor';
+  $: canDrop = canInteract && ['processing', 'resolved'].includes(status);
+
   function onDragOver(e) {
+    if (!canDrop) return;
     e.preventDefault();
     isDragOver = true;
   }
@@ -24,6 +28,7 @@
   }
 
   async function onDrop(e) {
+    if (!canDrop) return;
     e.preventDefault();
     isDragOver = false;
     const issueId = e.dataTransfer.getData('issueId');

@@ -12,6 +12,14 @@ export interface Investigator {
   claimedAt: Date;
 }
 
+export interface IssueComment {
+  userId: string;
+  name: string;
+  pictureUrl: string;
+  text: string;
+  createdAt: Date;
+}
+
 export type ScrapeStatus = 'pending' | 'done' | 'failed';
 
 export interface IssueDocument {
@@ -21,6 +29,7 @@ export interface IssueDocument {
   status: IssueStatus;
   reporterIds: string[];
   investigators: Investigator[];
+  comments?: IssueComment[];
   createdAt: Date;
   updatedAt: Date;
   resolvedAt?: Date;
@@ -172,6 +181,23 @@ const Issue = {
         },
         {
           $push: { investigators: investigator as any },
+          $set: { updatedAt: new Date() },
+        },
+        { returnOriginal: false }
+      )
+    ).value;
+  },
+
+  async addComment(
+    id: string,
+    comment: IssueComment
+  ): Promise<IssueDocument | null> {
+    const col = await getCollection();
+    return (
+      await col.findOneAndUpdate(
+        { _id: new ObjectId(id) },
+        {
+          $push: { comments: comment as any },
           $set: { updatedAt: new Date() },
         },
         { returnOriginal: false }

@@ -18,6 +18,7 @@ const SAFE_HOSTS = new Set([
   'threads.net', 'www.threads.net',
   'weibo.com', 'www.weibo.com', 'weibo.cn', 'm.weibo.cn',
   'linkedin.com', 'www.linkedin.com',
+  'liff.line.me',
   // Taiwan news
   'udn.com', 'www.udn.com',
   'ltn.com.tw', 'news.ltn.com.tw', 'www.ltn.com.tw',

@@ -1,6 +1,6 @@
 import Router from 'koa-router';
 import getRawBody from 'raw-body';
-import Issue, { IssueStatus, Investigator } from 'src/database/models/issue';
+import Issue, { IssueComment, IssueStatus, Investigator } from 'src/database/models/issue';
 import Account, { AccountStatus } from 'src/database/models/account';
 import LineUser, { LineUserRole } from 'src/database/models/lineUser';
 import { syncAllIssues } from 'src/lib/sheets';
@@ -99,7 +99,7 @@ router.post('/issues', requireAdmin, async (ctx: any) => {
 
 const VALID_STATUSES: IssueStatus[] = ['new', 'processing', 'resolved', 'cofacts_resolved'];
 
-router.patch('/issues/:id/status', requireAdmin, async (ctx: any) => {
+router.patch('/issues/:id/status', requireEditor, async (ctx: any) => {
   const body = await parseJsonBody(ctx);
   const { status } = body as { status: IssueStatus };
 
@@ -132,18 +132,51 @@ router.post('/issues/:id/investigators', requireEditor, async (ctx: any) => {
     claimedAt: new Date(),
   };
 
-  const issue = await Issue.addInvestigator(ctx.params.id, investigator);
+  let issue = await Issue.addInvestigator(ctx.params.id, investigator);
   if (!issue) {
     ctx.status = 409;
     ctx.body = { error: 'Already assigned or max investigators (5) reached' };
     return;
   }
+
+  if (issue.status === 'new') {
+    issue = (await Issue.updateStatus(ctx.params.id, 'processing')) ?? issue;
+  }
+
   ctx.body = issue;
 });
 
 router.delete('/issues/:id/investigators', requireEditor, async (ctx: any) => {
   const session: InvestigatorSession = ctx.session.investigator;
   const issue = await Issue.removeInvestigator(ctx.params.id, session.userId);
+  if (!issue) {
+    ctx.status = 404;
+    ctx.body = { error: 'Issue not found' };
+    return;
+  }
+  ctx.body = issue;
+});
+
+router.post('/issues/:id/comments', requireEditor, async (ctx: any) => {
+  const body = await parseJsonBody(ctx);
+  const text = typeof body.text === 'string' ? body.text.trim() : '';
+
+  if (!text) {
+    ctx.status = 400;
+    ctx.body = { error: 'text is required' };
+    return;
+  }
+
+  const session: InvestigatorSession = ctx.session.investigator;
+  const comment: IssueComment = {
+    userId: session.userId,
+    name: session.name,
+    pictureUrl: session.pictureUrl,
+    text,
+    createdAt: new Date(),
+  };
+
+  const issue = await Issue.addComment(ctx.params.id, comment);
   if (!issue) {
     ctx.status = 404;
     ctx.body = { error: 'Issue not found' };
