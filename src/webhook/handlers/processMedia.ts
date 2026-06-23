@@ -3,6 +3,9 @@ import type { FlexMessage } from '@line/bot-sdk';
 
 import { CooccurredMessage } from 'src/types/chatbotState';
 import ga from 'src/lib/ga';
+import lineClient from 'src/webhook/lineClient';
+import { uploadImageToDrive } from 'src/lib/driveUpload';
+import { appendImageRow } from 'src/lib/sheets';
 
 import {
   getLineContentProxyURL,
@@ -23,6 +26,25 @@ const SIMILARITY_THRESHOLD = 0.95;
 export default async function (message: CooccurredMessage, userId: string) {
   const proxyUrl = getLineContentProxyURL(message.id);
   console.log(`Media url: ${proxyUrl}`);
+
+  // Fire-and-forget: upload image to Google Drive and record in Sheets
+  if (message.type === 'image') {
+    (async () => {
+      try {
+        const res = await lineClient.getContent(message.id);
+        const contentType = res.headers.get('content-type') ?? 'image/jpeg';
+        const arrayBuffer = await res.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const ext = contentType.split('/')[1]?.split(';')[0] ?? 'jpg';
+        const filename = `${new Date().toISOString().replace(/[:.]/g, '-')}_${message.id}.${ext}`;
+        const driveUrl = await uploadImageToDrive(filename, buffer, contentType);
+        await appendImageRow(userId, driveUrl, new Date());
+        console.log(`[driveUpload] Uploaded ${filename} → ${driveUrl}`);
+      } catch (err) {
+        console.error('[driveUpload] Failed:', err);
+      }
+    })();
+  }
 
   const visitor = ga(userId, '__PROCESS_MEDIA__', proxyUrl);
 

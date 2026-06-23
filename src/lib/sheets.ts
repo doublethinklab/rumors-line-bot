@@ -7,6 +7,7 @@ const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_ID;
 export const SHEET = {
   ISSUES: 'Issues',
   ACCOUNTS: 'Accounts',
+  IMAGES: '圖片紀錄',
 } as const;
 
 let _sheets: sheets_v4.Sheets | null = null;
@@ -90,6 +91,33 @@ export async function syncAllIssues(issues: IssueDocument[]): Promise<void> {
     range: `${SHEET.ISSUES}!A1`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [header, ...rows] },
+  });
+}
+
+/**
+ * Append a single image row to the 圖片紀錄 sheet.
+ * Columns: LINE用戶ID | Drive連結 | 收到時間
+ */
+export async function appendImageRow(
+  userId: string,
+  driveUrl: string,
+  receivedAt: Date
+): Promise<void> {
+  if (!SPREADSHEET_ID) return;
+  const sheets = await getSheets();
+
+  const row = [
+    userId,
+    driveUrl,
+    receivedAt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }),
+  ];
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${SHEET.IMAGES}!A:C`,
+    valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: [row] },
   });
 }
 
