@@ -34,7 +34,7 @@ export async function appendIssueRow(issue: IssueDocument): Promise<void> {
 
   const investigators = issue.investigators.map((i) => i.name).join(', ');
   const row = [
-    String(issue._id),
+    issue.reporterIds.join(', '),
     issue.status === 'new' ? '新議題' : issue.status === 'processing' ? '處理中' : '已處理',
     issue.inputType === 'link' ? '連結' : '文字',
     issue.platform ?? '',
@@ -63,12 +63,12 @@ export async function syncAllIssues(issues: IssueDocument[]): Promise<void> {
   const sheets = await getSheets();
 
   const header = [
-    'ID', '狀態', '類型', '平台', '帳號', '內容/URL',
+    '回報者LINE ID', '狀態', '類型', '平台', '帳號', '內容/URL',
     '回報人數', '調查員', 'AI摘要', '建立時間',
   ];
 
   const rows = issues.map((issue) => [
-    String(issue._id),
+    issue.reporterIds.join(', '),
     issue.status === 'new' ? '新議題' : issue.status === 'processing' ? '處理中' : '已處理',
     issue.inputType === 'link' ? '連結' : '文字',
     issue.platform ?? '',
