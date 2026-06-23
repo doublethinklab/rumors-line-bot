@@ -305,7 +305,15 @@ const singleUserHandler = async (
           el: webhookEvent.message.type,
         })
         .send();
-      return cancel();
+      return send({
+        context: await setNewContext(userId),
+        replies: [
+          {
+            type: 'text',
+            text: '目前僅支援文字訊息及圖片。\n請直接傳送您想查核的文章內容或連結給我。',
+          },
+        ],
+      });
     }
 
     case 'audio':
