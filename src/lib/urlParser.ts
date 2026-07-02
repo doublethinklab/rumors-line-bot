@@ -6,6 +6,9 @@ export type Platform =
   | 'tiktok'
   | 'threads'
   | 'weibo'
+  | 'bilibili'
+  | 'dcard'
+  | 'ptt'
   | 'unknown';
 
 export interface ParsedUrl {
@@ -13,15 +16,19 @@ export interface ParsedUrl {
   platform: Platform;
   accountHandle: string | null;
   isUnknownSite: boolean;
+  /** True when URL points to a profile/account page rather than a specific post */
+  isAccountPage: boolean;
 }
 
 const URL_REGEX = /https?:\/\/[^\s　，、・。！？」』】〕]+/gi;
 
 const KNOWN_HOSTS: Record<string, Platform> = {
   'facebook.com': 'facebook',
+  'www.facebook.com': 'facebook',
+  'm.facebook.com': 'facebook',
+  'l.facebook.com': 'facebook',
   'fb.com': 'facebook',
   'fb.watch': 'facebook',
-  'm.facebook.com': 'facebook',
   'twitter.com': 'twitter',
   'x.com': 'twitter',
   'instagram.com': 'instagram',
@@ -35,10 +42,20 @@ const KNOWN_HOSTS: Record<string, Platform> = {
   'vm.tiktok.com': 'tiktok',
   'threads.net': 'threads',
   'www.threads.net': 'threads',
+  'l.threads.net': 'threads',
   'weibo.com': 'weibo',
   'www.weibo.com': 'weibo',
   'weibo.cn': 'weibo',
   'm.weibo.cn': 'weibo',
+  'bilibili.com': 'bilibili',
+  'www.bilibili.com': 'bilibili',
+  'm.bilibili.com': 'bilibili',
+  'space.bilibili.com': 'bilibili',
+  'dcard.tw': 'dcard',
+  'www.dcard.tw': 'dcard',
+  'ptt.cc': 'ptt',
+  'www.ptt.cc': 'ptt',
+  'disp.cc': 'ptt',
 };
 
 export function extractUrls(text: string): string[] {
@@ -55,6 +72,7 @@ export function parseUrl(rawUrl: string): ParsedUrl {
       platform: 'unknown',
       accountHandle: null,
       isUnknownSite: true,
+      isAccountPage: false,
     };
   }
 
@@ -67,61 +85,110 @@ export function parseUrl(rawUrl: string): ParsedUrl {
       platform: 'unknown',
       accountHandle: null,
       isUnknownSite: true,
+      isAccountPage: false,
     };
   }
 
   const parts = url.pathname.split('/').filter(Boolean);
 
   let accountHandle: string | null = null;
+  let isAccountPage = false;
+
+  const FACEBOOK_NON_ACCOUNT_PATHS = new Set([
+    'watch', 'groups', 'sharer', 'photo', 'video', 'events', 'pages',
+    'story.php', 'permalink.php', 'share', 'login', 'home.php', 'reel',
+    'marketplace', 'gaming', 'ads', 'l.php',
+  ]);
 
   switch (platform) {
     case 'facebook':
+      // l.facebook.com is a link redirect — no account info in the path
+      if (url.hostname === 'l.facebook.com') break;
       if (url.searchParams.get('id')) {
         accountHandle = `id:${url.searchParams.get('id')}`;
-      } else if (parts[0] && parts[0] !== 'watch' && parts[0] !== 'groups') {
+      } else if (parts[0] && !FACEBOOK_NON_ACCOUNT_PATHS.has(parts[0])) {
         accountHandle = parts[0];
+        isAccountPage = parts.length === 1;
       }
       break;
 
     case 'twitter':
-      if (parts[0] && parts[0] !== 'i') {
+      if (parts[0] && !['i', 'home', 'explore', 'notifications', 'messages', 'settings', 'search'].includes(parts[0])) {
         accountHandle = `@${parts[0]}`;
+        isAccountPage = parts.length === 1;
       }
       break;
 
     case 'instagram':
-      if (parts[0] && !['p', 'reel', 'stories', 'explore'].includes(parts[0])) {
+      if (parts[0] && !['p', 'reel', 'stories', 'explore', 'tv', 'accounts', 'direct'].includes(parts[0])) {
         accountHandle = `@${parts[0]}`;
+        isAccountPage = parts.length === 1;
       }
       break;
 
     case 'youtube':
       if (parts[0]?.startsWith('@')) {
         accountHandle = parts[0];
+        isAccountPage = parts.length === 1;
       } else if (parts[0] === 'channel' && parts[1]) {
         accountHandle = parts[1];
+        isAccountPage = parts.length === 2;
       } else if (parts[0] === 'c' && parts[1]) {
         accountHandle = `@${parts[1]}`;
+        isAccountPage = parts.length === 2;
       } else if (parts[0] === 'user' && parts[1]) {
         accountHandle = `@${parts[1]}`;
+        isAccountPage = parts.length === 2;
       }
       break;
 
     case 'tiktok':
       if (parts[0]?.startsWith('@')) {
         accountHandle = parts[0];
+        isAccountPage = parts.length === 1;
       }
       break;
 
     case 'threads':
+      // l.threads.net is a link redirect — no account info
+      if (url.hostname === 'l.threads.net') break;
       if (parts[0]?.startsWith('@')) {
         accountHandle = parts[0];
+        isAccountPage = parts.length === 1;
       }
       break;
 
     case 'weibo':
       if (parts[0] && !['p', 'status', 'tv'].includes(parts[0])) {
         accountHandle = parts[0];
+        isAccountPage = parts.length === 1;
+      }
+      break;
+
+    case 'bilibili':
+      // space.bilibili.com/UID — user profile
+      if (url.hostname === 'space.bilibili.com' && parts[0]) {
+        accountHandle = parts[0];
+        isAccountPage = true;
+      }
+      break;
+
+    case 'dcard':
+      // /f/boardname — forum board
+      if (parts[0] === 'f' && parts[1]) {
+        accountHandle = parts[1];
+        isAccountPage = parts.length === 2;
+      } else if (parts[0] === 'profile' && parts[1] === 'u' && parts[2]) {
+        accountHandle = parts[2];
+        isAccountPage = true;
+      }
+      break;
+
+    case 'ptt':
+      // /bbs/BOARDNAME/...
+      if (parts[0] === 'bbs' && parts[1]) {
+        accountHandle = parts[1];
+        isAccountPage = parts.length === 2 || (parts.length === 3 && parts[2].startsWith('index'));
       }
       break;
   }
@@ -131,5 +198,6 @@ export function parseUrl(rawUrl: string): ParsedUrl {
     platform,
     accountHandle,
     isUnknownSite: false,
+    isAccountPage,
   };
 }

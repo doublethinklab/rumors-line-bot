@@ -20,7 +20,9 @@
 
   const PLATFORM_LABEL = {
     facebook: 'FB', twitter: 'X', instagram: 'IG',
-    youtube: 'YT', tiktok: 'TT', threads: 'TH', unknown: '?',
+    youtube: 'YT', tiktok: 'TT', threads: 'TH',
+    weibo: 'WB', bilibili: 'BL', dcard: 'DC', ptt: 'PTT',
+    unknown: '?',
   };
 
   let editingId = null;

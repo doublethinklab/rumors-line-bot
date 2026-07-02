@@ -4,7 +4,7 @@ import Account from 'src/database/models/account';
 import { extractUrls, parseUrl } from './urlParser';
 import { checkUrlSafety } from './urlSafety';
 import { scrapeQueue } from './queues';
-import { appendIssueRow } from './sheets';
+import { appendIssueRow, syncAllIssues } from './sheets';
 
 const SIMILARITY_THRESHOLD = 0.7;
 
@@ -29,6 +29,7 @@ async function upsertFromLink(
   const existing = await Issue.findByUrl(rawUrl);
   if (existing) {
     await Issue.addReporter(existing._id!, reporterUserId);
+    Issue.findAll().then(all => syncAllIssues(all)).catch(err => console.error('[sheets] Sync failed:', err));
     return existing;
   }
 
@@ -57,13 +58,15 @@ async function upsertFromLink(
   }
 
   // 4. Same account already has an issue — bump reporter count
-  if (!parsed.isUnknownSite && parsed.platform && parsed.accountHandle) {
+  // Skip for account page URLs: they should create their own issue even if an article issue exists
+  if (!parsed.isUnknownSite && parsed.platform && parsed.accountHandle && !parsed.isAccountPage) {
     const sameAccount = await Issue.findByAccount(
       parsed.platform,
       parsed.accountHandle
     );
     if (sameAccount) {
       await Issue.addReporter(sameAccount._id!, reporterUserId);
+      Issue.findAll().then(all => syncAllIssues(all)).catch(err => console.error('[sheets] Sync failed:', err));
       return sameAccount;
     }
   }
@@ -113,6 +116,7 @@ async function upsertFromText(
 
     if (bestMatch.rating >= SIMILARITY_THRESHOLD) {
       await Issue.addReporter(textIssues[bestMatchIndex]._id!, reporterUserId);
+      Issue.findAll().then(all => syncAllIssues(all)).catch(err => console.error('[sheets] Sync failed:', err));
       return textIssues[bestMatchIndex];
     }
   }

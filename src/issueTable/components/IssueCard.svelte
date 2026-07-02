@@ -25,17 +25,21 @@
     'tiktok',
     'threads',
     'weibo',
+    'bilibili',
+    'dcard',
+    'ptt',
   ]);
 
   const SOCIAL_HOSTS = new Set([
-    'facebook.com', 'www.facebook.com', 'fb.com', 'fb.watch', 'm.facebook.com', 'l.facebook.com',
+    'facebook.com', 'www.facebook.com', 'fb.com', 'fb.watch', 'm.facebook.com', 'l.facebook.com', 'fbcdn.net',
     'twitter.com', 'www.twitter.com', 'x.com', 'www.x.com', 'mobile.twitter.com',
     'instagram.com', 'www.instagram.com',
     'youtube.com', 'www.youtube.com', 'youtu.be', 'm.youtube.com',
     'tiktok.com', 'www.tiktok.com', 'vm.tiktok.com',
-    'threads.net', 'www.threads.net',
+    'threads.net', 'www.threads.net', 'l.threads.net',
     'weibo.com', 'www.weibo.com', 'weibo.cn', 'm.weibo.cn',
     'linkedin.com', 'www.linkedin.com',
+    'bilibili.com', 'www.bilibili.com', 'm.bilibili.com', 'space.bilibili.com',
     'dcard.tw', 'www.dcard.tw',
     'ptt.cc', 'www.ptt.cc', 'disp.cc',
     'line.me', 'liff.line.me',
