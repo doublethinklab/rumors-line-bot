@@ -1,28 +1,22 @@
 jest.mock('src/lib/queues', () => {
   const Bull = require('bull');
   return {
-    groupEventQueue: new Bull('test_queue_groupEventQueue', {
-      redis: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
-    }),
-    expiredGroupEventQueue: new Bull('test_queue_expiredGroupEventQueue', {
+    scrapeQueue: new Bull('test_queue_scrapeQueue', {
       redis: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
     }),
   };
 });
 
-import { groupEventQueue, expiredGroupEventQueue } from 'src/lib/queues';
+import { scrapeQueue } from 'src/lib/queues';
 import { gql } from '../testUtils';
 import MockDate from 'mockdate';
 
 beforeEach(async () => {
-  await groupEventQueue.removeJobs('*');
-  await expiredGroupEventQueue.removeJobs('*');
+  await scrapeQueue.removeJobs('*');
 });
 afterAll(async () => {
-  await groupEventQueue.removeJobs('*');
-  await expiredGroupEventQueue.removeJobs('*');
-  await groupEventQueue.close();
-  await expiredGroupEventQueue.close();
+  await scrapeQueue.removeJobs('*');
+  await scrapeQueue.close();
 });
 
 it('returns info for empty queues', async () => {
@@ -59,20 +53,7 @@ it('returns info for empty queues', async () => {
             },
             "lastCompletedAt": null,
             "lastWaitingAt": null,
-            "queueName": "test_queue_groupEventQueue",
-          },
-          Object {
-            "isPaused": false,
-            "jobCounts": Object {
-              "active": 0,
-              "completed": 0,
-              "delayed": 0,
-              "failed": 0,
-              "waiting": 0,
-            },
-            "lastCompletedAt": null,
-            "lastWaitingAt": null,
-            "queueName": "test_queue_expiredGroupEventQueue",
+            "queueName": "test_queue_scrapeQueue",
           },
         ],
       },
@@ -82,8 +63,7 @@ it('returns info for empty queues', async () => {
 
 it('returns waiting job info', async () => {
   MockDate.set(612921600000);
-  await groupEventQueue.add({ foo: 'bar' });
-  await expiredGroupEventQueue.add({ foo: 'bar' });
+  await scrapeQueue.add({ foo: 'bar' });
 
   const resultQueued = await gql`
     {
@@ -108,14 +88,7 @@ it('returns waiting job info', async () => {
               "waiting": 1,
             },
             "lastWaitingAt": 1989-06-04T00:00:00.000Z,
-            "queueName": "test_queue_groupEventQueue",
-          },
-          Object {
-            "jobCounts": Object {
-              "waiting": 1,
-            },
-            "lastWaitingAt": 1989-06-04T00:00:00.000Z,
-            "queueName": "test_queue_expiredGroupEventQueue",
+            "queueName": "test_queue_scrapeQueue",
           },
         ],
       },

@@ -1,71 +1,36 @@
 import { Message } from '@line/bot-sdk';
-import { t } from 'ttag';
 
-import { Context, CooccurredMessage } from 'src/types/chatbotState';
+import { Context, CooccurredMessage, Result } from 'src/types/chatbotState';
+import handleReportMessage from './handleReportMessage';
 
-import {
-  POSTBACK_NO,
-  POSTBACK_YES,
-  createPostbackAction,
-  createTextMessage,
-  setNewContext,
-} from './utils';
-import ga from 'src/lib/ga';
+/** LINE reply/push API allows at most 5 messages per call. */
+const MAX_REPLIES = 5;
 
-async function processBatch(messages: CooccurredMessage[], userId: string) {
-  const context: Context = await setNewContext(userId, { msgs: messages });
+/**
+ * Processes a batch of messages that arrived within the debounce window
+ * (requirements.md asks users to send one message at a time, but this keeps
+ * handling robust if they don't). Each message is reported independently, in
+ * order; only the last message's reply may carry the advanced-description
+ * prompt, since only one such prompt can be pending per user at a time.
+ */
+async function processBatch(
+  messages: CooccurredMessage[],
+  userId: string
+): Promise<Result> {
+  let context: Context | undefined;
+  const replies: Message[] = [];
 
-  const msgCount = messages.length;
+  for (let index = 0; index < messages.length; index += 1) {
+    const isLast = index === messages.length - 1;
+    const result = await handleReportMessage(messages[index], userId);
+    context = result.context;
+    replies.push(...(isLast ? result.replies : result.replies.slice(0, 1)));
+  }
 
-  const visitor = ga(
-    userId,
-    '__PROCESS_BATCH__',
-    `Batch: ${msgCount} messages`
-  );
-
-  // Track media message type send by user
-  messages.forEach((message) => {
-    visitor.event({
-      ec: 'UserInput',
-      ea: 'MessageType',
-      el: message.type,
-    });
-  });
-  visitor.send();
-
-  const replies: Message[] = [
-    {
-      ...createTextMessage({
-        text: t`May I ask if the ${msgCount} messages above were sent by the same person at the same time?`,
-      }),
-      quickReply: {
-        items: [
-          {
-            type: 'action',
-            action: createPostbackAction(
-              t`Yes`,
-              POSTBACK_YES,
-              t`Yes, same person at same time`,
-              context.sessionId,
-              'ASKING_COOCCURRENCE'
-            ),
-          },
-          {
-            type: 'action',
-            action: createPostbackAction(
-              t`No`,
-              POSTBACK_NO,
-              t`No, from different person or at different time`,
-              context.sessionId,
-              'ASKING_COOCCURRENCE'
-            ),
-          },
-        ],
-      },
-    },
-  ];
-
-  return { context, replies };
+  return {
+    context: context as Context,
+    replies: replies.slice(0, MAX_REPLIES),
+  };
 }
 
 export default processBatch;

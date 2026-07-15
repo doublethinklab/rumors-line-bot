@@ -3,7 +3,6 @@ jest.mock('src/webhook/checkSignatureAndParse');
 jest.mock('src/lib/redisClient', () => ({}));
 
 // Spied functions
-jest.mock('../handlers/groupHandler');
 jest.mock('../handlers/singleUserHandler');
 
 import Koa from 'koa';
@@ -13,21 +12,9 @@ import MockDate from 'mockdate';
 import { sleep } from 'src/lib/sharedUtils';
 import webhookRouter from '..';
 import originalSingleUserHandler from '../handlers/singleUserHandler';
-import OriginalGroupHandler from '../handlers/groupHandler';
-import { groupEventQueue, expiredGroupEventQueue } from 'src/lib/queues';
 
 const singleUserHandler = originalSingleUserHandler as jest.MockedFunction<
   typeof originalSingleUserHandler
->;
-const GroupHandler = OriginalGroupHandler as jest.MockedClass<
-  typeof OriginalGroupHandler
->;
-
-// The groupHandler instance in global scope of index.ts
-//
-const groupHandlerInstance = GroupHandler.mock.instances[0];
-const mockedAddJob = groupHandlerInstance.addJob as jest.MockedFunction<
-  typeof groupHandlerInstance.addJob
 >;
 
 import { WebhookEvent } from '@line/bot-sdk';
@@ -37,17 +24,14 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  mockedAddJob.mockClear();
-  GroupHandler.mockClear();
+  singleUserHandler.mockClear();
 });
 
-afterAll(async () => {
+afterAll(() => {
   MockDate.reset();
-  await groupEventQueue.close();
-  await expiredGroupEventQueue.close();
 });
 
-it('invokes singleUserHandler and GroupHandler correctly', async () => {
+it('invokes singleUserHandler for 1-1 events and ignores group events', async () => {
   const app = new Koa();
   app.use(webhookRouter.routes());
 
@@ -71,7 +55,7 @@ it('invokes singleUserHandler and GroupHandler correctly', async () => {
         keywords: [],
       },
     },
-    // Event from group chat
+    // Event from group chat — not supported, should be silently ignored
     {
       replyToken: 'nHuyWiB7yP5Zw52FIkcQobQuGDXCTA',
       type: 'message',
@@ -121,36 +105,6 @@ it('invokes singleUserHandler and GroupHandler correctly', async () => {
           },
           "timestamp": 1462629479859,
           "type": "message",
-        },
-      ],
-    ]
-  `);
-
-  expect(mockedAddJob.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        Object {
-          "groupId": "G4af4980630",
-          "replyToken": "nHuyWiB7yP5Zw52FIkcQobQuGDXCTA",
-          "type": "message",
-          "webhookEvent": Object {
-            "message": Object {
-              "id": "325708",
-              "keywords": Array [],
-              "packageId": "1",
-              "stickerId": "1",
-              "stickerResourceType": "STATIC",
-              "type": "sticker",
-            },
-            "mode": "active",
-            "replyToken": "nHuyWiB7yP5Zw52FIkcQobQuGDXCTA",
-            "source": Object {
-              "groupId": "G4af4980630",
-              "type": "group",
-            },
-            "timestamp": 1462629479859,
-            "type": "message",
-          },
         },
       ],
     ]

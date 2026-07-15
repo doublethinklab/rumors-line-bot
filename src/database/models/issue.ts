@@ -2,8 +2,12 @@ import { ObjectId } from 'mongodb';
 import mongoClient from '../mongoClient';
 import type { Platform } from 'src/lib/urlParser';
 
-export type IssueStatus = 'new' | 'processing' | 'resolved' | 'cofacts_resolved';
-export type InputType = 'text' | 'link';
+export type IssueStatus =
+  | 'new'
+  | 'processing'
+  | 'resolved'
+  | 'cofacts_resolved';
+export type InputType = 'text' | 'link' | 'image' | 'video';
 
 export interface Investigator {
   userId: string;
@@ -25,7 +29,7 @@ export type ScrapeStatus = 'pending' | 'done' | 'failed';
 export interface IssueDocument {
   _id?: ObjectId;
   inputType: InputType;
-  canonicalText: string;   // for text issues: message content; for link issues: original URL
+  canonicalText: string; // for text issues: message content; for link issues: original URL
   status: IssueStatus;
   reporterIds: string[];
   investigators: Investigator[];
@@ -36,18 +40,19 @@ export interface IssueDocument {
   // link-specific fields
   platform?: Platform;
   accountHandle?: string;
-  accountId?: ObjectId;      // ref to accounts collection
+  accountId?: ObjectId; // ref to accounts collection
   isUnknownSite?: boolean;
-  defangedUrl?: string;      // legacy field — no longer written to new issues
+  defangedUrl?: string; // legacy field — no longer written to new issues
   accountDiscontinued?: boolean; // true when account was already known+discontinued
-  isUnsafe?: boolean;        // true when URL failed safety checks
+  isUnsafe?: boolean; // true when URL failed safety checks
   // analyst-submitted notes
   analystNotes?: string;
   // scraping fields
   scrapeStatus?: ScrapeStatus;
   scrapedText?: string;
-  aiSummary?: string;
   scrapedAt?: Date;
+  // reporter-submitted free-text description, collected after the report is made
+  reporterDescription?: string;
 }
 
 const COLLECTION = 'issues';
@@ -133,6 +138,31 @@ const Issue = {
     reporterUserId: string
   ): Promise<IssueDocument> {
     return Issue.createText(canonicalText, reporterUserId);
+  },
+
+  async createMedia(
+    fields: { inputType: 'image' | 'video'; canonicalText: string },
+    reporterUserId: string
+  ): Promise<IssueDocument> {
+    const col = await getCollection();
+    const doc: IssueDocument = {
+      status: 'new',
+      reporterIds: [reporterUserId],
+      investigators: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...fields,
+    };
+    const result = await col.insertOne(doc);
+    return result.ops[0];
+  },
+
+  async setReporterDescription(id: string, description: string): Promise<void> {
+    const col = await getCollection();
+    await col.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { reporterDescription: description, updatedAt: new Date() } }
+    );
   },
 
   async addReporter(id: ObjectId, reporterUserId: string): Promise<void> {

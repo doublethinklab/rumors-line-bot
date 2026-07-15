@@ -1,4 +1,3 @@
-import { t } from 'ttag';
 import { Message, WebhookEvent } from '@line/bot-sdk';
 
 import {
@@ -10,19 +9,20 @@ import {
 } from 'src/types/chatbotState';
 import ga from 'src/lib/ga';
 import redis from 'src/lib/redisClient';
-import { extractArticleId, sleep } from 'src/lib/sharedUtils';
+import { sleep } from 'src/lib/sharedUtils';
 import lineClient from 'src/webhook/lineClient';
 import UserSettings from 'src/database/models/userSettings';
+import Issue from 'src/database/models/issue';
+import { syncAllIssues } from 'src/lib/sheets';
 
-import handlePostback from './handlePostback';
-import {
-  TUTORIAL_STEPS,
-  createGreetingMessage,
-  createTutorialMessage,
-} from './tutorial';
-import processMedia from './processMedia';
+import askingAdvancedDescription from './askingAdvancedDescription';
+import handleReportMessage from './handleReportMessage';
 import processBatch from './processBatch';
-import initState from './initState';
+import {
+  WELCOME_MESSAGE,
+  createUnsupportedTypeReply,
+  createDescriptionReceivedReply,
+} from './reportFlow';
 import {
   setReplyToken,
   consumeReplyTokenInfo,
@@ -30,7 +30,6 @@ import {
   setReplyTokenCollectorMsg,
   getRedisBatchKey,
 } from './utils';
-import { upsertFromMessage } from 'src/lib/issueService';
 
 const userIdBlacklist = (process.env.USERID_BLACKLIST || '').split(',');
 
@@ -38,12 +37,6 @@ const userIdBlacklist = (process.env.USERID_BLACKLIST || '').split(',');
  * The amount of time to wait for the next message to arrive before processing the batch.
  */
 const TIMEOUT_BEFORE_PROCESSING = 500; // ms
-
-/**
- * The amount of time to wait for the next message to arrive before asking if the messages are
- * sent by the same person at the same time.
- */
-const TIMEOUT_BEFORE_ASKING_COOCCURRENCES = 1000; // ms
 
 // A symbol that is used to prevent accidental return in singleUserHandler.
 // It should only be used when timeout are correctly handled.
@@ -164,8 +157,8 @@ const singleUserHandler = async (
 
   /**
    * Adds cooccurred message to batch.
-   * After BATCH_TIMEOUT since the last message has been added, initiate the processing of these
-   * co-occurred messages.
+   * After TIMEOUT_BEFORE_PROCESSING since the last message has been added, process the
+   * batch of co-occurred messages (see processBatch.ts).
    */
   async function addMsgToBatch(
     msg: CooccurredMessage
@@ -189,39 +182,13 @@ const singleUserHandler = async (
     );
 
     if (messages.length !== 1) {
-      // Asking cooccurrences are faster than processing single message in batch.
-      // To prevent new messages from coming in right after we ask cooccurrences,
-      // we wait first and check if there are new messages.
-      //
-      await sleep(TIMEOUT_BEFORE_ASKING_COOCCURRENCES);
       return send(await processBatch(messages, userId), msg);
     }
 
     // Now there is only one message in the batch;
     // messages[0] should be identical to msg.
     //
-    if (msg.type !== 'text') {
-      return send(await processMedia(msg, userId), msg);
-    }
-
-    return send(
-      await initState({
-        // Create a new "search session".
-        // Used to determine button postbacks and GraphQL requests are from
-        // previous sessions
-        //
-        context: await setNewContext<
-          /** Narrow down context to only include text messages */
-          Context & {
-            msgs: ReadonlyArray<CooccurredMessage & { type: 'text' }>;
-          }
-        >(userId, {
-          msgs: [msg],
-        }),
-        userId,
-      }),
-      msg
-    );
+    return send(await handleReportMessage(msg, userId), msg);
   }
 
   switch (webhookEvent.type) {
@@ -239,22 +206,15 @@ const singleUserHandler = async (
       await UserSettings.setAllowNewReplyUpdate(userId, true);
 
       // Create new context
-      const context = await setNewContext(userId);
+      const newContext = await setNewContext(userId);
 
-      const visitor = ga(userId, 'TUTORIAL');
-      visitor.event({
-        ec: 'Tutorial',
-        ea: 'Step',
-        el: 'ON_BOARDING',
-      });
-      visitor.send();
+      ga(userId, 'FOLLOW')
+        .event({ ec: 'Follow', ea: 'Step', el: 'ON_BOARDING' })
+        .send();
 
       return send({
-        context,
-        replies: [
-          createGreetingMessage(),
-          createTutorialMessage(context.sessionId),
-        ],
+        context: newContext,
+        replies: [{ type: 'text', text: WELCOME_MESSAGE }],
       });
     }
 
@@ -263,29 +223,31 @@ const singleUserHandler = async (
         webhookEvent.postback.data
       ) as PostbackActionData<unknown>;
 
-      if (postbackData.sessionId === context.sessionId) {
-        return send(await handlePostback(context, postbackData, userId));
+      if (postbackData.sessionId !== context.sessionId) {
+        // Postback data session ID != context session ID can happen when
+        // (1) user context in redis is expired, or
+        // (2) if other new messages have been sent before pressing buttons.
+        //
+        console.log('Previous button pressed.');
+
+        return send({
+          context, // Reuse existing context
+          replies: [
+            {
+              type: 'text',
+              text: '🚧 您目前有其他新的回報正在進行，這個按鈕已經失效囉。',
+            },
+          ],
+        });
       }
 
-      // Postback data session ID != context session ID can happen when
-      // (1) user context in redis is expired, or
-      // (2) if other new messages have been sent before pressing buttons.
-      //
-      // Under these scenarios, tell the user about the expiry of buttons
-      //
-      console.log('Previous button pressed.');
+      if (postbackData.state === 'ASKING_ADVANCED_DESCRIPTION') {
+        return send(
+          await askingAdvancedDescription({ context, postbackData, userId })
+        );
+      }
 
-      return send({
-        context, // Reuse existing context
-        replies: [
-          {
-            type: 'text',
-            text:
-              '🚧 ' +
-              t`You are currently searching for another message, buttons from previous search sessions do not work now.`,
-          },
-        ],
-      });
+      return cancel();
     }
 
     case 'message': {
@@ -297,7 +259,7 @@ const singleUserHandler = async (
   //
   switch (webhookEvent.message.type) {
     default: {
-      // Track other message type send by user
+      // Unsupported message type (sticker, file, location, audio, etc.) — Scenario 7
       ga(userId)
         .event({
           ec: 'UserInput',
@@ -307,16 +269,10 @@ const singleUserHandler = async (
         .send();
       return send({
         context: await setNewContext(userId),
-        replies: [
-          {
-            type: 'text',
-            text: '目前僅支援文字訊息及圖片。\n請直接傳送您想查核的文章內容或連結給我。',
-          },
-        ],
+        replies: createUnsupportedTypeReply(),
       });
     }
 
-    case 'audio':
     case 'video':
     case 'image':
       return addMsgToBatch({
@@ -341,50 +297,25 @@ const singleUserHandler = async (
       return cancel();
     }
 
-    case TUTORIAL_STEPS['RICH_MENU']: {
-      // Start new session, reroute to TUTORIAL
-      const context = await setNewContext(userId);
-      return send(
-        await handlePostback(
-          context,
-          {
-            state: 'TUTORIAL',
-            sessionId: context.sessionId,
-            input: TUTORIAL_STEPS['RICH_MENU'],
-          },
-          userId
-        )
-      );
-    }
-
     default: {
       const trimmedInput = webhookEvent.message.text.trim();
-      const articleId = extractArticleId(trimmedInput);
 
-      if (articleId) {
-        // It is a predefined text message wanting us to visit a article.
-        // Start new session, reroute to CHOOSING_ARTILCE and simulate "choose article" postback event
-        const context = await setNewContext(userId);
-        return send(
-          await handlePostback(
-            // Start a new session
-            context,
-            {
-              state: 'CHOOSING_ARTICLE',
-              sessionId: context.sessionId,
-              input: articleId,
-            },
-            userId
-          )
-        );
+      if (context.awaitingDescriptionForIssueId) {
+        // The user is replying with the advanced description they agreed to provide.
+        //
+        const issueId = context.awaitingDescriptionForIssueId;
+        await Issue.setReporterDescription(issueId, trimmedInput);
+        Issue.findAll()
+          .then((all) => syncAllIssues(all))
+          .catch((err) => console.error('[sheets] Sync failed:', err));
+
+        return send({
+          context: await setNewContext(userId),
+          replies: createDescriptionReceivedReply(),
+        });
       }
 
-      // Fire-and-forget: record message as an issue for the investigation dashboard
-      upsertFromMessage(trimmedInput, userId).catch((err) => {
-        console.error('[IssueService] Failed to upsert issue:', err);
-      });
-
-      // The user forwarded us an new message.
+      // The user is reporting a new message.
       //
       return addMsgToBatch({
         id: webhookEvent.message.id,
@@ -412,21 +343,28 @@ async function getContextForUser(userId: string): Promise<Context> {
     return context;
   }
 
-  // Converting legacy context to new context
+  // Converting legacy context to new context.
+  // Audio was never supported by CooccurredMessage going forward, so a legacy
+  // audio session has nothing to migrate to and just resets to an empty batch.
   return setNewContext(userId, {
     sessionId: context.data.sessionId,
-    msgs: [
+    msgs:
       'searchedText' in context.data
-        ? {
-            id: context.data.sessionId.toString(), // Original message ID is not available, use session id to differentiate
-            type: 'text',
-            text: context.data.searchedText,
-          }
-        : {
-            id: context.data.messageId,
-            type: context.data.messageType,
-          },
-    ],
+        ? [
+            {
+              id: context.data.sessionId.toString(), // Original message ID is not available, use session id to differentiate
+              type: 'text' as const,
+              text: context.data.searchedText,
+            },
+          ]
+        : context.data.messageType === 'audio'
+        ? []
+        : [
+            {
+              id: context.data.messageId,
+              type: context.data.messageType,
+            },
+          ],
   });
 }
 

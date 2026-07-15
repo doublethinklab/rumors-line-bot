@@ -15,7 +15,7 @@ async function getDrive() {
   return _drive;
 }
 
-export async function uploadImageToDrive(
+export async function uploadToDrive(
   filename: string,
   buffer: Buffer,
   mimeType: string

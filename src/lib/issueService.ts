@@ -29,7 +29,9 @@ async function upsertFromLink(
   const existing = await Issue.findByUrl(rawUrl);
   if (existing) {
     await Issue.addReporter(existing._id!, reporterUserId);
-    Issue.findAll().then(all => syncAllIssues(all)).catch(err => console.error('[sheets] Sync failed:', err));
+    Issue.findAll()
+      .then((all) => syncAllIssues(all))
+      .catch((err) => console.error('[sheets] Sync failed:', err));
     return existing;
   }
 
@@ -45,7 +47,11 @@ async function upsertFromLink(
   let accountId: import('mongodb').ObjectId | undefined;
   let accountDiscontinued = false;
 
-  if (!parsed.isUnknownSite && parsed.platform !== 'unknown' && parsed.accountHandle) {
+  if (
+    !parsed.isUnknownSite &&
+    parsed.platform !== 'unknown' &&
+    parsed.accountHandle
+  ) {
     const { account, isNew } = await Account.upsert(
       parsed.platform,
       parsed.accountHandle
@@ -59,14 +65,21 @@ async function upsertFromLink(
 
   // 4. Same account already has an issue — bump reporter count
   // Skip for account page URLs: they should create their own issue even if an article issue exists
-  if (!parsed.isUnknownSite && parsed.platform && parsed.accountHandle && !parsed.isAccountPage) {
+  if (
+    !parsed.isUnknownSite &&
+    parsed.platform &&
+    parsed.accountHandle &&
+    !parsed.isAccountPage
+  ) {
     const sameAccount = await Issue.findByAccount(
       parsed.platform,
       parsed.accountHandle
     );
     if (sameAccount) {
       await Issue.addReporter(sameAccount._id!, reporterUserId);
-      Issue.findAll().then(all => syncAllIssues(all)).catch(err => console.error('[sheets] Sync failed:', err));
+      Issue.findAll()
+        .then((all) => syncAllIssues(all))
+        .catch((err) => console.error('[sheets] Sync failed:', err));
       return sameAccount;
     }
   }
@@ -100,6 +113,23 @@ async function upsertFromLink(
   return newIssue;
 }
 
+export async function upsertFromMedia(
+  inputType: 'image' | 'video',
+  driveUrl: string,
+  reporterUserId: string
+): Promise<IssueDocument> {
+  const newIssue = await Issue.createMedia(
+    { inputType, canonicalText: driveUrl },
+    reporterUserId
+  );
+
+  appendIssueRow(newIssue).catch((err) =>
+    console.error('[sheets] Failed to append media issue:', err)
+  );
+
+  return newIssue;
+}
+
 async function upsertFromText(
   text: string,
   reporterUserId: string
@@ -116,7 +146,9 @@ async function upsertFromText(
 
     if (bestMatch.rating >= SIMILARITY_THRESHOLD) {
       await Issue.addReporter(textIssues[bestMatchIndex]._id!, reporterUserId);
-      Issue.findAll().then(all => syncAllIssues(all)).catch(err => console.error('[sheets] Sync failed:', err));
+      Issue.findAll()
+        .then((all) => syncAllIssues(all))
+        .catch((err) => console.error('[sheets] Sync failed:', err));
       return textIssues[bestMatchIndex];
     }
   }

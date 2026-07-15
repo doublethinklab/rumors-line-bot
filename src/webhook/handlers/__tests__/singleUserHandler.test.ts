@@ -1,33 +1,46 @@
 import MockDate from 'mockdate';
 import UserSettings from 'src/database/models/userSettings';
+import originalIssue from 'src/database/models/issue';
+import { syncAllIssues as originalSyncAllIssues } from 'src/lib/sheets';
 import originalLineClient from 'src/webhook/lineClient';
 import originalGa from 'src/lib/ga';
-import { sleep, VIEW_ARTICLE_PREFIX, getArticleURL } from 'src/lib/sharedUtils';
+import { sleep } from 'src/lib/sharedUtils';
 import type { MockedGa } from 'src/lib/__mocks__/ga';
 import redis from 'src/lib/redisClient';
 
 import { getRedisBatchKey } from '../utils';
 import singleUserHandler from '../singleUserHandler';
-import originalInitState from '../initState';
-import originalHandlePostback from '../handlePostback';
-import { TUTORIAL_STEPS } from '../tutorial';
+import originalHandleReportMessage from '../handleReportMessage';
+import originalProcessBatch from '../processBatch';
+import originalAskingAdvancedDescription from '../askingAdvancedDescription';
+import { WELCOME_MESSAGE } from '../reportFlow';
 
 import { MessageEvent, PostbackEvent, TextEventMessage } from '@line/bot-sdk';
-import { LegacyContext } from 'src/types/chatbotState';
 
 jest.mock('src/webhook/lineClient');
 jest.mock('src/lib/ga');
+jest.mock('src/database/models/issue');
+jest.mock('src/lib/sheets');
 
-jest.mock('../initState', () => jest.fn());
-jest.mock('../handlePostback', () => jest.fn());
+jest.mock('../handleReportMessage', () => jest.fn());
+jest.mock('../processBatch', () => jest.fn());
+jest.mock('../askingAdvancedDescription', () => jest.fn());
 
 const redisGet = jest.spyOn(redis, 'get');
 
-const initState = originalInitState as jest.MockedFunction<
-  typeof originalInitState
+const handleReportMessage = originalHandleReportMessage as jest.MockedFunction<
+  typeof originalHandleReportMessage
 >;
-const handlePostback = originalHandlePostback as jest.MockedFunction<
-  typeof originalHandlePostback
+const processBatch = originalProcessBatch as jest.MockedFunction<
+  typeof originalProcessBatch
+>;
+const askingAdvancedDescription =
+  originalAskingAdvancedDescription as jest.MockedFunction<
+    typeof originalAskingAdvancedDescription
+  >;
+const Issue = originalIssue as jest.Mocked<typeof originalIssue>;
+const syncAllIssues = originalSyncAllIssues as jest.MockedFunction<
+  typeof originalSyncAllIssues
 >;
 
 const lineClient = originalLineClient as jest.Mocked<typeof originalLineClient>;
@@ -37,8 +50,12 @@ const ga = originalGa as MockedGa;
 const NOW = 1561982400000;
 
 beforeEach(() => {
-  initState.mockClear();
-  handlePostback.mockClear();
+  handleReportMessage.mockClear();
+  processBatch.mockClear();
+  askingAdvancedDescription.mockClear();
+  Issue.setReporterDescription.mockClear();
+  Issue.findAll.mockClear();
+  syncAllIssues.mockClear();
   redisGet.mockClear();
   lineClient.post.mockClear();
   ga.clearAllMocks();
@@ -77,22 +94,29 @@ it('handles follow and unfollow event', async () => {
     (await UserSettings.find({ userId })).map((e) => ({ ...e, _id: '_id' }))
   ).toMatchSnapshot('User settings should have notification turned on');
 
-  expect(lineClient.post.mock.calls).toMatchSnapshot('Tutorial replies');
-
-  expect(ga.mock.calls).toMatchInlineSnapshot(`
+  expect(lineClient.post.mock.calls).toMatchInlineSnapshot(`
+    Array [
       Array [
-        Array [
-          "U4af4980629",
-          "TUTORIAL",
-        ],
-      ]
-    `);
+        "/message/reply",
+        Object {
+          "messages": Array [
+            Object {
+              "text": ${JSON.stringify(WELCOME_MESSAGE)},
+              "type": "text",
+            },
+          ],
+          "replyToken": "nHuyWiB7yP5Zw52FIkcQobQuGDXCTA",
+        },
+      ],
+    ]
+  `);
+
   expect(ga.eventMock.mock.calls).toMatchInlineSnapshot(`
       Array [
         Array [
           Object {
             "ea": "Step",
-            "ec": "Tutorial",
+            "ec": "Follow",
             "el": "ON_BOARDING",
           },
         ],
@@ -116,7 +140,7 @@ it('handles follow and unfollow event', async () => {
   );
 });
 
-it('ignores sticker events', async () => {
+it('replies with the unsupported-type message for sticker events', async () => {
   const event: MessageEvent & { message: { type: 'sticker' } } = {
     replyToken: 'nHuyWiB7yP5Zw52FIkcQobQuGDXCTA',
     type: 'message',
@@ -155,136 +179,76 @@ it('ignores sticker events', async () => {
   `);
   expect(ga.sendMock).toHaveBeenCalledTimes(1);
 
-  // Exepct no replies
-  expect(lineClient.post.mock.calls).toMatchInlineSnapshot(`Array []`);
+  expect(lineClient.post.mock.calls).toMatchSnapshot();
 });
 
-it('handles postbacks w/ LegacyContext', async () => {
-  const sessionId = 123;
+it('dispatches ASKING_ADVANCED_DESCRIPTION postbacks with a matching session id', async () => {
+  const sessionId = NOW;
 
-  redisGet.mockImplementationOnce(
-    (): Promise<LegacyContext> =>
-      Promise.resolve({
-        data: { sessionId, searchedText: '' },
-      })
+  redisGet.mockImplementationOnce(() =>
+    Promise.resolve({ sessionId, msgs: [] })
   );
 
   const event: PostbackEvent = {
     type: 'postback',
     postback: {
       data: JSON.stringify({
-        sessionId, // Same session ID
-        foo: 'bar', // Other postback data
+        sessionId,
+        state: 'ASKING_ADVANCED_DESCRIPTION',
+        input: { choice: 'yes', issueId: 'issue-1' },
       }),
     },
     mode: 'active',
     timestamp: 0,
     source: {
       type: 'user',
-      userId: '',
+      userId,
     },
-    replyToken: '',
+    replyToken: 'reply-token',
   };
 
-  handlePostback.mockImplementationOnce((context) => {
+  askingAdvancedDescription.mockImplementationOnce((params) => {
     return Promise.resolve({
-      context,
-      replies: [
-        {
-          type: 'text',
-          text: 'Postback results here',
-        },
-      ],
+      context: params.context,
+      replies: [{ type: 'text', text: '請用「文字」描述您回傳之訊息。' }],
     });
   });
 
   await singleUserHandler(userId, event);
   await sleep(500);
 
-  // Called once with context.data, postbackk data, and anuser
-  expect(handlePostback.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        Object {
-          "msgs": Array [
-            Object {
-              "id": "123",
-              "text": "",
-              "type": "text",
-            },
-          ],
-          "sessionId": 123,
-        },
-        Object {
-          "foo": "bar",
-          "sessionId": 123,
-        },
-        "U4af4980629",
-      ],
-    ]
-  `);
-
-  // Expect postback results are sent to LINE
-  expect(lineClient.post.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        "/message/reply",
-        Object {
-          "messages": Array [
-            Object {
-              "text": "Postback results here",
-              "type": "text",
-            },
-          ],
-          "replyToken": "",
-        },
-      ],
-    ]
-  `);
+  expect(askingAdvancedDescription).toHaveBeenCalledTimes(1);
+  expect(lineClient.post.mock.calls).toMatchSnapshot();
 });
 
-it('rejects outdated postback events', async () => {
-  // Simulate context removed by Redis
-  redisGet.mockImplementationOnce(() => Promise.resolve(null));
+it('rejects postbacks whose session id no longer matches', async () => {
+  redisGet.mockImplementationOnce(() =>
+    Promise.resolve({ sessionId: NOW, msgs: [] })
+  );
 
   const event: PostbackEvent = {
     type: 'postback',
     postback: {
       data: JSON.stringify({
-        sessionId: 123, // Same session ID
-        foo: 'bar', // Other postback data
+        sessionId: 123, // Does not match the freshly-created context's session id
+        state: 'ASKING_ADVANCED_DESCRIPTION',
+        input: { choice: 'yes', issueId: 'issue-1' },
       }),
     },
     mode: 'active',
     timestamp: 0,
     source: {
       type: 'user',
-      userId: '',
+      userId,
     },
-    replyToken: '',
+    replyToken: 'reply-token',
   };
 
   await singleUserHandler(userId, event);
   await sleep(500);
 
-  expect(handlePostback).not.toHaveBeenCalled();
-  // Expect we are telling user about old buttons
-  expect(lineClient.post.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        "/message/reply",
-        Object {
-          "messages": Array [
-            Object {
-              "text": "🚧 You are currently searching for another message, buttons from previous search sessions do not work now.",
-              "type": "text",
-            },
-          ],
-          "replyToken": "",
-        },
-      ],
-    ]
-  `);
+  expect(askingAdvancedDescription).not.toHaveBeenCalled();
+  expect(lineClient.post.mock.calls).toMatchSnapshot();
 });
 
 function createTextMessageEvent(
@@ -307,137 +271,14 @@ function createTextMessageEvent(
   };
 }
 
-it('forwards to CHOOSING_ARTICLE when VIEW_ARTICLE_PREFIX is sent', async () => {
-  const event = createTextMessageEvent(
-    `${VIEW_ARTICLE_PREFIX}${getArticleURL('article-id')}`
-  );
-
-  handlePostback.mockImplementationOnce((context) => {
-    return Promise.resolve({
-      context,
-      replies: [
-        {
-          type: 'text',
-          text: 'Choosing article resp',
-        },
-      ],
-    });
-  });
-
-  await singleUserHandler('user-id', event);
-
-  await sleep(500);
-
-  // Expect handlePostback is called with synthetic CHOOSING_ARTICLE postback
-  expect(handlePostback).toHaveBeenCalledTimes(1);
-  expect(handlePostback.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        Object {
-          "msgs": Array [],
-          "sessionId": 1561982400000,
-        },
-        Object {
-          "input": "article-id",
-          "sessionId": 1561982400000,
-          "state": "CHOOSING_ARTICLE",
-        },
-        "user-id",
-      ],
-    ]
-  `);
-
-  // Expect replies are sent
-  expect(lineClient.post.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        "/message/reply",
-        Object {
-          "messages": Array [
-            Object {
-              "text": "Choosing article resp",
-              "type": "text",
-            },
-          ],
-          "replyToken": "",
-        },
-      ],
-    ]
-  `);
-});
-
-it('shows reply list when article URL is sent', async () => {
-  const event = createTextMessageEvent(
-    getArticleURL('article-id') + '  \n  ' /* simulate manual input */
-  );
-
-  handlePostback.mockImplementationOnce((context) => {
-    return Promise.resolve({
-      context,
-      replies: [
-        {
-          type: 'text',
-          text: 'Choosing article resp',
-        },
-      ],
-    });
-  });
-
-  await singleUserHandler('user-id', event);
-
-  await sleep(500);
-
-  // Expect handlePostback is called with synthetic CHOOSING_ARTICLE postback
-  expect(handlePostback).toHaveBeenCalledTimes(1);
-  expect(handlePostback.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        Object {
-          "msgs": Array [],
-          "sessionId": 1561982400000,
-        },
-        Object {
-          "input": "article-id",
-          "sessionId": 1561982400000,
-          "state": "CHOOSING_ARTICLE",
-        },
-        "user-id",
-      ],
-    ]
-  `);
-
-  // Expect replies are sent
-  expect(lineClient.post.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        "/message/reply",
-        Object {
-          "messages": Array [
-            Object {
-              "text": "Choosing article resp",
-              "type": "text",
-            },
-          ],
-          "replyToken": "",
-        },
-      ],
-    ]
-  `);
-});
-
-it('Resets session on free-form input, triggers fast-forward', async () => {
+it('reports a single text message via handleReportMessage', async () => {
   const input = 'Newly forwarded message';
   const event = createTextMessageEvent(input);
 
-  initState.mockImplementationOnce(({ context }) => {
+  handleReportMessage.mockImplementationOnce((message) => {
     return Promise.resolve({
-      context,
-      replies: [
-        {
-          type: 'text',
-          text: 'Replies here',
-        },
-      ],
+      context: { sessionId: NOW, msgs: [message] },
+      replies: [{ type: 'text', text: 'Replies here' }],
     });
   });
 
@@ -446,7 +287,8 @@ it('Resets session on free-form input, triggers fast-forward', async () => {
   await sleep(100); // Wait for async redis to be processed
 
   // Expect the message is added to batch
-  expect(redis.range(REDIS_BATCH_KEY, 0, -1)).resolves.toMatchInlineSnapshot(`
+  await expect(redis.range(REDIS_BATCH_KEY, 0, -1)).resolves
+    .toMatchInlineSnapshot(`
     Array [
       Object {
         "id": "TmV3bHkgZm9yd2FyZGVkIG1lc3NhZ2U=",
@@ -460,103 +302,44 @@ it('Resets session on free-form input, triggers fast-forward', async () => {
   await processingPromise;
 
   // Expect batch is cleared
-  expect(redis.range(REDIS_BATCH_KEY, 0, -1)).resolves.toMatchInlineSnapshot(
-    `Array []`
+  await expect(
+    redis.range(REDIS_BATCH_KEY, 0, -1)
+  ).resolves.toMatchInlineSnapshot(`Array []`);
+
+  expect(handleReportMessage).toHaveBeenCalledTimes(1);
+  expect(handleReportMessage).toHaveBeenCalledWith(
+    {
+      id: 'TmV3bHkgZm9yd2FyZGVkIG1lc3NhZ2U=',
+      text: 'Newly forwarded message',
+      type: 'text',
+    },
+    'user-id'
   );
 
-  // Expect initState is called
-  expect(initState).toHaveBeenCalledTimes(1);
-  expect(initState.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        Object {
-          "context": Object {
-            "msgs": Array [
-              Object {
-                "id": "TmV3bHkgZm9yd2FyZGVkIG1lc3NhZ2U=",
-                "text": "Newly forwarded message",
-                "type": "text",
-              },
-            ],
-            "sessionId": 1561982400000,
-          },
-          "userId": "user-id",
-        },
-      ],
-    ]
-  `);
-
-  // Expect replies are sent
-  expect(lineClient.post.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        "/message/reply",
-        Object {
-          "messages": Array [
-            Object {
-              "text": "Replies here",
-              "type": "text",
-            },
-          ],
-          "replyToken": "",
-        },
-      ],
-    ]
-  `);
+  expect(lineClient.post.mock.calls).toMatchSnapshot();
 });
 
-it('handles tutorial trigger from rich menu', async () => {
-  const event = createTextMessageEvent(TUTORIAL_STEPS['RICH_MENU']);
+it('treats the reply as an advanced description when one is pending', async () => {
+  redisGet.mockImplementationOnce(() =>
+    Promise.resolve({
+      sessionId: NOW,
+      msgs: [],
+      awaitingDescriptionForIssueId: 'issue-42',
+    })
+  );
 
-  handlePostback.mockImplementationOnce((context) => {
-    return Promise.resolve({
-      context,
-      replies: [
-        {
-          type: 'text',
-          text: 'Tutorial here',
-        },
-      ],
-    });
-  });
+  Issue.findAll.mockResolvedValueOnce([]);
 
-  await singleUserHandler('user-id', event);
+  const event = createTextMessageEvent('這是我的補充說明');
+
+  await singleUserHandler(userId, event);
   await sleep(500);
 
-  // Expect handlePostback is called with synthetic TUTORIAL postback
-  expect(handlePostback).toHaveBeenCalledTimes(1);
-  expect(handlePostback.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        Object {
-          "msgs": Array [],
-          "sessionId": 1561982400000,
-        },
-        Object {
-          "input": "📖 tutorial",
-          "sessionId": 1561982400000,
-          "state": "TUTORIAL",
-        },
-        "user-id",
-      ],
-    ]
-  `);
-
-  // Expect replies are sent
-  expect(lineClient.post.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        "/message/reply",
-        Object {
-          "messages": Array [
-            Object {
-              "text": "Tutorial here",
-              "type": "text",
-            },
-          ],
-          "replyToken": "",
-        },
-      ],
-    ]
-  `);
+  expect(Issue.setReporterDescription).toHaveBeenCalledWith(
+    'issue-42',
+    '這是我的補充說明'
+  );
+  expect(handleReportMessage).not.toHaveBeenCalled();
+  expect(processBatch).not.toHaveBeenCalled();
+  expect(lineClient.post.mock.calls).toMatchSnapshot();
 });

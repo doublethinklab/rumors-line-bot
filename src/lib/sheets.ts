@@ -7,7 +7,6 @@ const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_ID;
 export const SHEET = {
   ISSUES: 'Issues',
   ACCOUNTS: 'Accounts',
-  IMAGES: '圖片紀錄',
 } as const;
 
 let _sheets: sheets_v4.Sheets | null = null;
@@ -24,34 +23,53 @@ async function getSheets(): Promise<sheets_v4.Sheets> {
   return _sheets;
 }
 
+const INPUT_TYPE_LABEL: Record<IssueDocument['inputType'], string> = {
+  text: '文字',
+  link: '連結',
+  image: '圖片',
+  video: '影片',
+};
+
+function buildIssueRow(issue: IssueDocument): (string | number)[] {
+  const createdAt = new Date(issue.createdAt);
+  const content =
+    issue.inputType === 'image' || issue.inputType === 'video'
+      ? `[${INPUT_TYPE_LABEL[issue.inputType]}]`
+      : issue.canonicalText;
+  const archive =
+    issue.inputType === 'image' || issue.inputType === 'video'
+      ? issue.canonicalText
+      : issue.inputType === 'link'
+      ? issue.scrapedText ?? ''
+      : '';
+
+  return [
+    issue.reporterIds.join(', '),
+    INPUT_TYPE_LABEL[issue.inputType],
+    issue.platform ?? '',
+    issue.accountHandle ?? '',
+    content,
+    createdAt.toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' }),
+    createdAt.toLocaleTimeString('zh-TW', { timeZone: 'Asia/Taipei' }),
+    archive,
+    issue.reporterDescription ?? '',
+  ];
+}
+
 /**
  * Append a single issue row to the Issues sheet.
- * Columns: ID | 狀態 | 類型 | 平台 | 帳號 | 內容/URL | 回報人數 | 調查員 | AI摘要 | 建立時間
+ * Columns: 回報者LINE ID | 類型 | 平台 | 帳號 | 內容/URL | 建立日期 | 建立時間 | Archive | 進階描述
  */
 export async function appendIssueRow(issue: IssueDocument): Promise<void> {
   if (!SPREADSHEET_ID) return;
   const sheets = await getSheets();
 
-  const investigators = issue.investigators.map((i) => i.name).join(', ');
-  const row = [
-    issue.reporterIds.join(', '),
-    issue.status === 'new' ? '新議題' : issue.status === 'processing' ? '處理中' : '已處理',
-    issue.inputType === 'link' ? '連結' : '文字',
-    issue.platform ?? '',
-    issue.accountHandle ?? '',
-    issue.canonicalText,
-    issue.reporterIds.length,
-    investigators,
-    issue.aiSummary ?? '',
-    new Date(issue.createdAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }),
-  ];
-
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET.ISSUES}!A:J`,
+    range: `${SHEET.ISSUES}!A:I`,
     valueInputOption: 'USER_ENTERED',
     insertDataOption: 'INSERT_ROWS',
-    requestBody: { values: [row] },
+    requestBody: { values: [buildIssueRow(issue)] },
   });
 }
 
@@ -63,27 +81,23 @@ export async function syncAllIssues(issues: IssueDocument[]): Promise<void> {
   const sheets = await getSheets();
 
   const header = [
-    '回報者LINE ID', '狀態', '類型', '平台', '帳號', '內容/URL',
-    '回報人數', '調查員', 'AI摘要', '建立時間',
+    '回報者LINE ID',
+    '類型',
+    '平台',
+    '帳號',
+    '內容/URL',
+    '建立日期',
+    '建立時間',
+    'Archive',
+    '進階描述',
   ];
 
-  const rows = issues.map((issue) => [
-    issue.reporterIds.join(', '),
-    issue.status === 'new' ? '新議題' : issue.status === 'processing' ? '處理中' : '已處理',
-    issue.inputType === 'link' ? '連結' : '文字',
-    issue.platform ?? '',
-    issue.accountHandle ?? '',
-    issue.canonicalText,
-    issue.reporterIds.length,
-    issue.investigators.map((i) => i.name).join(', '),
-    issue.aiSummary ?? '',
-    new Date(issue.createdAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }),
-  ]);
+  const rows = issues.map(buildIssueRow);
 
   // Clear then rewrite
   await sheets.spreadsheets.values.clear({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET.ISSUES}!A:J`,
+    range: `${SHEET.ISSUES}!A:I`,
   });
 
   await sheets.spreadsheets.values.update({
@@ -91,33 +105,6 @@ export async function syncAllIssues(issues: IssueDocument[]): Promise<void> {
     range: `${SHEET.ISSUES}!A1`,
     valueInputOption: 'USER_ENTERED',
     requestBody: { values: [header, ...rows] },
-  });
-}
-
-/**
- * Append a single image row to the 圖片紀錄 sheet.
- * Columns: LINE用戶ID | Drive連結 | 收到時間
- */
-export async function appendImageRow(
-  userId: string,
-  driveUrl: string,
-  receivedAt: Date
-): Promise<void> {
-  if (!SPREADSHEET_ID) return;
-  const sheets = await getSheets();
-
-  const row = [
-    userId,
-    driveUrl,
-    receivedAt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }),
-  ];
-
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET.IMAGES}!A:C`,
-    valueInputOption: 'USER_ENTERED',
-    insertDataOption: 'INSERT_ROWS',
-    requestBody: { values: [row] },
   });
 }
 
@@ -130,7 +117,7 @@ export async function readIssuesSheet(): Promise<string[][]> {
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `${SHEET.ISSUES}!A:J`,
+    range: `${SHEET.ISSUES}!A:I`,
   });
 
   return (res.data.values as string[][]) ?? [];
