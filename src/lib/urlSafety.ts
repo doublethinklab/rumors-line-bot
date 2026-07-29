@@ -16,7 +16,9 @@ const SAFE_HOSTS = new Set([
   'youtube.com', 'www.youtube.com', 'youtu.be', 'm.youtube.com',
   'tiktok.com', 'www.tiktok.com', 'vm.tiktok.com',
   'threads.net', 'www.threads.net',
+  'threads.com', 'www.threads.com',
   'weibo.com', 'www.weibo.com', 'weibo.cn', 'm.weibo.cn',
+  'douyin.com', 'www.douyin.com', 'v.douyin.com', 'iesdouyin.com',
   'linkedin.com', 'www.linkedin.com',
   'liff.line.me',
   // Taiwan news
@@ -42,7 +44,7 @@ const SAFE_HOSTS = new Set([
   'ptt.cc', 'www.ptt.cc', 'disp.cc',
   'bilibili.com', 'www.bilibili.com', 'm.bilibili.com', 'space.bilibili.com',
   'l.facebook.com', 'www.facebook.com',
-  'l.threads.net',
+  'l.threads.net', 'l.threads.com',
   'bnext.com.tw', 'www.bnext.com.tw',
   'technews.tw', 'technews.com.tw',
   'ithome.com.tw', 'www.ithome.com.tw',

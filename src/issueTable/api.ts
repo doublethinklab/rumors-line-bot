@@ -3,7 +3,7 @@ import getRawBody from 'raw-body';
 import Issue, { IssueComment, IssueStatus, Investigator } from 'src/database/models/issue';
 import Account, { AccountStatus } from 'src/database/models/account';
 import LineUser, { LineUserRole } from 'src/database/models/lineUser';
-import { syncAllIssues } from 'src/lib/sheets';
+import { updateIssueRow } from 'src/lib/sheets';
 import { upsertFromMessage } from 'src/lib/issueService';
 
 const router = new Router();
@@ -117,10 +117,10 @@ router.patch('/issues/:id/status', requireEditor, async (ctx: any) => {
   }
   ctx.body = issue;
 
-  // Fire-and-forget full sync to keep sheet state current
-  Issue.findAll()
-    .then((all) => syncAllIssues(all))
-    .catch((err) => console.error('[sheets] Sync failed:', err));
+  // Fire-and-forget row update to keep sheet state current
+  updateIssueRow(issue).catch((err) =>
+    console.error('[sheets] Sync failed:', err)
+  );
 });
 
 router.post('/issues/:id/investigators', requireEditor, async (ctx: any) => {

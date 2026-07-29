@@ -47,7 +47,11 @@ export default async function handleMediaReport(
     context,
     replies: [
       createMediaReceivedAck(message.type),
-      createAdvancedDescriptionPrompt(String(issue._id), context.sessionId),
+      createAdvancedDescriptionPrompt(
+        String(issue._id),
+        context.sessionId,
+        message.type === 'image' ? '圖片內容' : '影片內容'
+      ),
     ],
   };
 }

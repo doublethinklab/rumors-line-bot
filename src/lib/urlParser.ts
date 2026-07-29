@@ -9,6 +9,7 @@ export type Platform =
   | 'bilibili'
   | 'dcard'
   | 'ptt'
+  | 'douyin'
   | 'unknown';
 
 export interface ParsedUrl {
@@ -43,6 +44,10 @@ const KNOWN_HOSTS: Record<string, Platform> = {
   'threads.net': 'threads',
   'www.threads.net': 'threads',
   'l.threads.net': 'threads',
+  // Meta migrated Threads links from threads.net to threads.com in 2024
+  'threads.com': 'threads',
+  'www.threads.com': 'threads',
+  'l.threads.com': 'threads',
   'weibo.com': 'weibo',
   'www.weibo.com': 'weibo',
   'weibo.cn': 'weibo',
@@ -56,6 +61,10 @@ const KNOWN_HOSTS: Record<string, Platform> = {
   'ptt.cc': 'ptt',
   'www.ptt.cc': 'ptt',
   'disp.cc': 'ptt',
+  'douyin.com': 'douyin',
+  'www.douyin.com': 'douyin',
+  'v.douyin.com': 'douyin',
+  'iesdouyin.com': 'douyin',
 };
 
 export function extractUrls(text: string): string[] {
@@ -150,8 +159,9 @@ export function parseUrl(rawUrl: string): ParsedUrl {
       break;
 
     case 'threads':
-      // l.threads.net is a link redirect — no account info
-      if (url.hostname === 'l.threads.net') break;
+      // l.threads.net / l.threads.com are link redirects — no account info
+      if (url.hostname === 'l.threads.net' || url.hostname === 'l.threads.com')
+        break;
       if (parts[0]?.startsWith('@')) {
         accountHandle = parts[0];
         isAccountPage = parts.length === 1;
@@ -189,6 +199,15 @@ export function parseUrl(rawUrl: string): ParsedUrl {
       if (parts[0] === 'bbs' && parts[1]) {
         accountHandle = parts[1];
         isAccountPage = parts.length === 2 || (parts.length === 3 && parts[2].startsWith('index'));
+      }
+      break;
+
+    case 'douyin':
+      // v.douyin.com is a short-link redirect — no account info in the path
+      if (url.hostname === 'v.douyin.com') break;
+      if (parts[0] === 'user' && parts[1]) {
+        accountHandle = parts[1];
+        isAccountPage = parts.length === 2;
       }
       break;
   }

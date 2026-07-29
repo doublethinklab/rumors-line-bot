@@ -2,7 +2,7 @@ import { scrapeQueue } from '../queues';
 import { scrapeIssue } from './index';
 import Issue from 'src/database/models/issue';
 import { ObjectId } from 'mongodb';
-import { syncAllIssues } from '../sheets';
+import { updateIssueRow } from '../sheets';
 
 const CONCURRENCY = Number(process.env.SCRAPE_CONCURRENCY || 2);
 
@@ -42,8 +42,8 @@ export function startScrapeWorker() {
     );
 
     // Backfill the sheet's Archive column now that the scraped content is available.
-    Issue.findAll()
-      .then((all) => syncAllIssues(all))
+    Issue.findById(issueId)
+      .then((updated) => updated && updateIssueRow(updated))
       .catch((err) => console.error('[sheets] Sync failed:', err));
 
     console.log(

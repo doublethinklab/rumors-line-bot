@@ -14,23 +14,40 @@ export const PLATFORM_DISPLAY_NAME: Record<Platform, string> = {
   bilibili: '哔哩哔哩',
   dcard: 'Dcard',
   ptt: 'PTT',
+  douyin: '抖音',
   unknown: '未知',
 };
 
 export const CONTINUE_PROMPT = '可以繼續回報新的可疑資訊囉！';
 
-export const WELCOME_MESSAGE = `感謝加入 DTL OHub 小幫鼠🐭！
-這邊主要提供給對防範境外可疑資訊的夥伴一同合作，來觀測網路上的各種可疑資訊！也會定期您分享 DTL 的社群推廣內容。
+/**
+ * Scenario 1 (Beginning): sent as three separate bubbles when a user first follows.
+ */
+export function createWelcomeMessages(): Message[] {
+  return [
+    {
+      type: 'text',
+      text: `感謝加入 DTL OHub 小幫鼠🐭！
+這邊主要提供給對防範境外可疑資訊的夥伴一同合作，來觀測網路上的各種可疑資訊！
 
-在此請依照以下規範回報可疑資訊：
+也會定期向您分享 DTL 的社群推廣內容。`,
+    },
+    {
+      type: 'text',
+      text: `在此請依照以下規範回報可疑資訊：
 
 1. 請一次只傳一則訊息，若有一則以上的訊息（e.g., 連結、圖片、影片）需要回報，請待系統提示後再傳下一則訊息。
 2. 請勿將本工具作為個人記事留言板
-3. ⭕️ 我們只接收如 1. 文字、2. 連結、3. 圖片、4. 影片 等訊息類型。
-4. ❌ 我們不接收以下類型資訊如：1. 貼圖、2. pdf 檔、3. xls 檔、4. ppt 檔、etc…
-5. 本機器人所收集之可疑訊息，僅供學術研究與數位輿情分析之用。我們絕不收集、亦不留存您的個人資料（如 LINE 帳號、大頭貼、個資等），所有回報內容將以去識別化方式進行分析，請安心回報。
-
-您可以開始回報觀察到的可疑資訊！`;
+3. ⭕️ 我們只接收如 a. 文字、b. 連結、c. 圖片、d. 影片 等訊息類型。
+4. ❌ 我們不接收以下類型資訊如：a. 貼圖、b. pdf 檔、c. xls 檔、d. ppt 檔、etc…
+5. 本機器人所收集之可疑訊息，僅供學術研究與數位輿情分析之用。我們絕不收集、亦不留存您的個人資料（如 LINE 帳號、大頭貼、個資等），所有回報內容將以去識別化方式進行分析，請安心回報。`,
+    },
+    {
+      type: 'text',
+      text: '您可以開始回報觀察到的可疑資訊！',
+    },
+  ];
+}
 
 export function createTextReceivedReply(): Message[] {
   return [
@@ -64,10 +81,11 @@ export function createMediaReceivedAck(inputType: 'image' | 'video'): Message {
  */
 export function createAdvancedDescriptionPrompt(
   issueId: string,
-  sessionId: number
+  sessionId: number,
+  /** What the prompt refers to: generic '訊息' for text/link, '圖片內容'/'影片內容' for media */
+  subject = '訊息'
 ): Message {
-  const text =
-    '您是否願意針對您提供的訊息做進階描述，以便分析團隊做後續判斷。\n請選擇「是」或「否」。';
+  const text = `您是否願意針對您提供的${subject}做進階描述，以便分析團隊做後續判斷。\n請選擇「是」或「否」。`;
 
   return {
     type: 'template',
@@ -121,4 +139,22 @@ export function createDescriptionReceivedReply(): Message[] {
     },
     { type: 'text', text: CONTINUE_PROMPT },
   ];
+}
+
+/**
+ * Scenario 8 (Our Facebook): broadcast sent to all users when DTL publishes a new
+ * Facebook post. Message content only — nothing currently calls this; wiring up
+ * when/how it gets triggered (admin action, cron, etc.) is a separate task.
+ */
+export function createFacebookPostBroadcast(postUrl: string): Message {
+  return {
+    type: 'text',
+    text: `🔔 【DTL 最新情資與觀察報告】
+
+各位 DTL 的夥伴，我們剛剛發布了最新的社群貼文！
+
+🔗 完整內容請看 Facebook 貼文：
+👉 點此閱讀
+${postUrl}`,
+  };
 }

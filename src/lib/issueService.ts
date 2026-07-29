@@ -4,9 +4,15 @@ import Account from 'src/database/models/account';
 import { extractUrls, parseUrl } from './urlParser';
 import { checkUrlSafety } from './urlSafety';
 import { scrapeQueue } from './queues';
-import { appendIssueRow, syncAllIssues } from './sheets';
+import { appendIssueRow, updateIssueRow } from './sheets';
 
 const SIMILARITY_THRESHOLD = 0.7;
+
+/** Re-reads an issue and pushes its current fields to its sheet row (add-reporter/dedup paths). */
+async function resyncIssueRow(id: import('mongodb').ObjectId): Promise<void> {
+  const issue = await Issue.findById(String(id));
+  if (issue) await updateIssueRow(issue);
+}
 
 export async function upsertFromMessage(
   text: string,
@@ -15,7 +21,10 @@ export async function upsertFromMessage(
   const urls = extractUrls(text);
 
   if (urls.length > 0) {
-    return upsertFromLink(urls[0], reporterUserId);
+    // Capture any free text the reporter typed alongside the URL — it used to
+    // be silently discarded since only the URL was kept as canonicalText.
+    const messageText = text.replace(urls[0], '').trim();
+    return upsertFromLink(urls[0], reporterUserId, messageText || undefined);
   }
 
   return upsertFromText(text, reporterUserId);
@@ -23,15 +32,17 @@ export async function upsertFromMessage(
 
 async function upsertFromLink(
   rawUrl: string,
-  reporterUserId: string
+  reporterUserId: string,
+  messageText?: string
 ): Promise<IssueDocument> {
   // 1. Exact URL match
   const existing = await Issue.findByUrl(rawUrl);
   if (existing) {
-    await Issue.addReporter(existing._id!, reporterUserId);
-    Issue.findAll()
-      .then((all) => syncAllIssues(all))
-      .catch((err) => console.error('[sheets] Sync failed:', err));
+    const id = existing._id!;
+    await Issue.addReporter(id, reporterUserId);
+    resyncIssueRow(id).catch((err) =>
+      console.error('[sheets] Sync failed:', err)
+    );
     return existing;
   }
 
@@ -76,10 +87,11 @@ async function upsertFromLink(
       parsed.accountHandle
     );
     if (sameAccount) {
-      await Issue.addReporter(sameAccount._id!, reporterUserId);
-      Issue.findAll()
-        .then((all) => syncAllIssues(all))
-        .catch((err) => console.error('[sheets] Sync failed:', err));
+      const id = sameAccount._id!;
+      await Issue.addReporter(id, reporterUserId);
+      resyncIssueRow(id).catch((err) =>
+        console.error('[sheets] Sync failed:', err)
+      );
       return sameAccount;
     }
   }
@@ -98,6 +110,7 @@ async function upsertFromLink(
       accountDiscontinued,
       scrapeStatus: shouldScrape ? 'pending' : undefined,
       isUnsafe: !safety.safe ? true : undefined,
+      messageText,
     },
     reporterUserId
   );
@@ -145,11 +158,13 @@ async function upsertFromText(
     );
 
     if (bestMatch.rating >= SIMILARITY_THRESHOLD) {
-      await Issue.addReporter(textIssues[bestMatchIndex]._id!, reporterUserId);
-      Issue.findAll()
-        .then((all) => syncAllIssues(all))
-        .catch((err) => console.error('[sheets] Sync failed:', err));
-      return textIssues[bestMatchIndex];
+      const match = textIssues[bestMatchIndex];
+      const id = match._id!;
+      await Issue.addReporter(id, reporterUserId);
+      resyncIssueRow(id).catch((err) =>
+        console.error('[sheets] Sync failed:', err)
+      );
+      return match;
     }
   }
 

@@ -13,13 +13,13 @@ import { sleep } from 'src/lib/sharedUtils';
 import lineClient from 'src/webhook/lineClient';
 import UserSettings from 'src/database/models/userSettings';
 import Issue from 'src/database/models/issue';
-import { syncAllIssues } from 'src/lib/sheets';
+import { updateIssueRow } from 'src/lib/sheets';
 
 import askingAdvancedDescription from './askingAdvancedDescription';
 import handleReportMessage from './handleReportMessage';
 import processBatch from './processBatch';
 import {
-  WELCOME_MESSAGE,
+  createWelcomeMessages,
   createUnsupportedTypeReply,
   createDescriptionReceivedReply,
 } from './reportFlow';
@@ -214,7 +214,7 @@ const singleUserHandler = async (
 
       return send({
         context: newContext,
-        replies: [{ type: 'text', text: WELCOME_MESSAGE }],
+        replies: createWelcomeMessages(),
       });
     }
 
@@ -305,8 +305,8 @@ const singleUserHandler = async (
         //
         const issueId = context.awaitingDescriptionForIssueId;
         await Issue.setReporterDescription(issueId, trimmedInput);
-        Issue.findAll()
-          .then((all) => syncAllIssues(all))
+        Issue.findById(issueId)
+          .then((issue) => issue && updateIssueRow(issue))
           .catch((err) => console.error('[sheets] Sync failed:', err));
 
         return send({

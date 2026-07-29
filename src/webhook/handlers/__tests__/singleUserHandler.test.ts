@@ -1,7 +1,7 @@
 import MockDate from 'mockdate';
 import UserSettings from 'src/database/models/userSettings';
 import originalIssue from 'src/database/models/issue';
-import { syncAllIssues as originalSyncAllIssues } from 'src/lib/sheets';
+import { updateIssueRow as originalUpdateIssueRow } from 'src/lib/sheets';
 import originalLineClient from 'src/webhook/lineClient';
 import originalGa from 'src/lib/ga';
 import { sleep } from 'src/lib/sharedUtils';
@@ -13,7 +13,7 @@ import singleUserHandler from '../singleUserHandler';
 import originalHandleReportMessage from '../handleReportMessage';
 import originalProcessBatch from '../processBatch';
 import originalAskingAdvancedDescription from '../askingAdvancedDescription';
-import { WELCOME_MESSAGE } from '../reportFlow';
+import { createWelcomeMessages } from '../reportFlow';
 
 import { MessageEvent, PostbackEvent, TextEventMessage } from '@line/bot-sdk';
 
@@ -39,8 +39,8 @@ const askingAdvancedDescription =
     typeof originalAskingAdvancedDescription
   >;
 const Issue = originalIssue as jest.Mocked<typeof originalIssue>;
-const syncAllIssues = originalSyncAllIssues as jest.MockedFunction<
-  typeof originalSyncAllIssues
+const updateIssueRow = originalUpdateIssueRow as jest.MockedFunction<
+  typeof originalUpdateIssueRow
 >;
 
 const lineClient = originalLineClient as jest.Mocked<typeof originalLineClient>;
@@ -55,7 +55,8 @@ beforeEach(() => {
   askingAdvancedDescription.mockClear();
   Issue.setReporterDescription.mockClear();
   Issue.findAll.mockClear();
-  syncAllIssues.mockClear();
+  Issue.findById.mockClear();
+  updateIssueRow.mockClear();
   redisGet.mockClear();
   lineClient.post.mockClear();
   ga.clearAllMocks();
@@ -94,22 +95,15 @@ it('handles follow and unfollow event', async () => {
     (await UserSettings.find({ userId })).map((e) => ({ ...e, _id: '_id' }))
   ).toMatchSnapshot('User settings should have notification turned on');
 
-  expect(lineClient.post.mock.calls).toMatchInlineSnapshot(`
-    Array [
-      Array [
-        "/message/reply",
-        Object {
-          "messages": Array [
-            Object {
-              "text": ${JSON.stringify(WELCOME_MESSAGE)},
-              "type": "text",
-            },
-          ],
-          "replyToken": "nHuyWiB7yP5Zw52FIkcQobQuGDXCTA",
-        },
-      ],
-    ]
-  `);
+  expect(lineClient.post.mock.calls).toEqual([
+    [
+      '/message/reply',
+      {
+        messages: createWelcomeMessages(),
+        replyToken: 'nHuyWiB7yP5Zw52FIkcQobQuGDXCTA',
+      },
+    ],
+  ]);
 
   expect(ga.eventMock.mock.calls).toMatchInlineSnapshot(`
       Array [
@@ -328,7 +322,7 @@ it('treats the reply as an advanced description when one is pending', async () =
     })
   );
 
-  Issue.findAll.mockResolvedValueOnce([]);
+  Issue.findById.mockResolvedValueOnce(null);
 
   const event = createTextMessageEvent('這是我的補充說明');
 

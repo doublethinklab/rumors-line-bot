@@ -53,6 +53,10 @@ export interface IssueDocument {
   scrapedAt?: Date;
   // reporter-submitted free-text description, collected after the report is made
   reporterDescription?: string;
+  // free text that accompanied a URL in the same message (link issues only)
+  messageText?: string;
+  // row number (1-indexed) of this issue in the Issues sheet, set after the first append
+  sheetRow?: number;
 }
 
 const COLLECTION = 'issues';
@@ -115,6 +119,7 @@ const Issue = {
       | 'accountDiscontinued'
       | 'scrapeStatus'
       | 'isUnsafe'
+      | 'messageText'
     >,
     reporterUserId: string
   ): Promise<IssueDocument> {
@@ -163,6 +168,11 @@ const Issue = {
       { _id: new ObjectId(id) },
       { $set: { reporterDescription: description, updatedAt: new Date() } }
     );
+  },
+
+  async setSheetRow(id: ObjectId, sheetRow: number): Promise<void> {
+    const col = await getCollection();
+    await col.updateOne({ _id: id }, { $set: { sheetRow } });
   },
 
   async addReporter(id: ObjectId, reporterUserId: string): Promise<void> {
