@@ -13,6 +13,7 @@ import singleUserHandler from '../singleUserHandler';
 import originalHandleReportMessage from '../handleReportMessage';
 import originalProcessBatch from '../processBatch';
 import originalAskingAdvancedDescription from '../askingAdvancedDescription';
+import originalAskingMediaSource from '../askingMediaSource';
 import { createWelcomeMessages } from '../reportFlow';
 
 import { MessageEvent, PostbackEvent, TextEventMessage } from '@line/bot-sdk';
@@ -25,6 +26,7 @@ jest.mock('src/lib/sheets');
 jest.mock('../handleReportMessage', () => jest.fn());
 jest.mock('../processBatch', () => jest.fn());
 jest.mock('../askingAdvancedDescription', () => jest.fn());
+jest.mock('../askingMediaSource', () => jest.fn());
 
 const redisGet = jest.spyOn(redis, 'get');
 
@@ -38,6 +40,9 @@ const askingAdvancedDescription =
   originalAskingAdvancedDescription as jest.MockedFunction<
     typeof originalAskingAdvancedDescription
   >;
+const askingMediaSource = originalAskingMediaSource as jest.MockedFunction<
+  typeof originalAskingMediaSource
+>;
 const Issue = originalIssue as jest.Mocked<typeof originalIssue>;
 const updateIssueRow = originalUpdateIssueRow as jest.MockedFunction<
   typeof originalUpdateIssueRow
@@ -53,7 +58,9 @@ beforeEach(() => {
   handleReportMessage.mockClear();
   processBatch.mockClear();
   askingAdvancedDescription.mockClear();
+  askingMediaSource.mockClear();
   Issue.setReporterDescription.mockClear();
+  Issue.setOriginalSourceUrl.mockClear();
   Issue.findAll.mockClear();
   Issue.findById.mockClear();
   updateIssueRow.mockClear();
@@ -66,10 +73,6 @@ beforeEach(() => {
 
 afterEach(() => {
   MockDate.reset();
-});
-
-afterAll(async () => {
-  await redis.quit();
 });
 
 const userId = 'U4af4980629';
@@ -215,6 +218,39 @@ it('dispatches ASKING_ADVANCED_DESCRIPTION postbacks with a matching session id'
   expect(lineClient.post.mock.calls).toMatchSnapshot();
 });
 
+it('dispatches ASKING_MEDIA_SOURCE postbacks with a matching session id', async () => {
+  redisGet.mockImplementationOnce(() =>
+    Promise.resolve({ sessionId: NOW, msgs: [] })
+  );
+
+  const event: PostbackEvent = {
+    type: 'postback',
+    postback: {
+      data: JSON.stringify({
+        sessionId: NOW,
+        state: 'ASKING_MEDIA_SOURCE',
+        input: { choice: 'yes', issueId: 'issue-1', inputType: 'image' },
+      }),
+    },
+    mode: 'active',
+    timestamp: 0,
+    source: { type: 'user', userId },
+    replyToken: 'reply-token',
+  };
+
+  askingMediaSource.mockImplementationOnce((params) =>
+    Promise.resolve({
+      context: params.context,
+      replies: [{ type: 'text', text: '請附上來源' }],
+    })
+  );
+
+  await singleUserHandler(userId, event);
+  await sleep(500);
+
+  expect(askingMediaSource).toHaveBeenCalledTimes(1);
+});
+
 it('rejects postbacks whose session id no longer matches', async () => {
   redisGet.mockImplementationOnce(() =>
     Promise.resolve({ sessionId: NOW, msgs: [] })
@@ -313,6 +349,40 @@ it('reports a single text message via handleReportMessage', async () => {
   expect(lineClient.post.mock.calls).toMatchSnapshot();
 });
 
+it('accepts a video sent through LINE as a file message', async () => {
+  const event = {
+    type: 'message',
+    message: {
+      id: 'file-video-1',
+      type: 'file',
+      fileName: 'evidence.MP4',
+      fileSize: '1234',
+    },
+    mode: 'active',
+    timestamp: 0,
+    source: { type: 'user', userId },
+    replyToken: 'file-reply-token',
+  } as MessageEvent;
+
+  handleReportMessage.mockImplementationOnce((message) =>
+    Promise.resolve({
+      context: { sessionId: NOW, msgs: [message] },
+      replies: [{ type: 'text', text: '影片已收到' }],
+    })
+  );
+
+  await singleUserHandler(userId, event);
+
+  expect(handleReportMessage).toHaveBeenCalledWith(
+    {
+      id: 'file-video-1',
+      type: 'video',
+      originalFileName: 'evidence.MP4',
+    },
+    userId
+  );
+});
+
 it('treats the reply as an advanced description when one is pending', async () => {
   redisGet.mockImplementationOnce(() =>
     Promise.resolve({
@@ -336,4 +406,64 @@ it('treats the reply as an advanced description when one is pending', async () =
   expect(handleReportMessage).not.toHaveBeenCalled();
   expect(processBatch).not.toHaveBeenCalled();
   expect(lineClient.post.mock.calls).toMatchSnapshot();
+});
+
+it('stores a valid media source URL and asks the advanced-description question', async () => {
+  redisGet.mockImplementationOnce(() =>
+    Promise.resolve({
+      sessionId: NOW,
+      msgs: [],
+      awaitingMediaSource: { issueId: 'issue-77', inputType: 'video' },
+    })
+  );
+  Issue.findById.mockResolvedValueOnce(null);
+
+  await singleUserHandler(
+    userId,
+    createTextMessageEvent('來源：https://example.com/original-video')
+  );
+  await sleep(500);
+
+  expect(Issue.setOriginalSourceUrl).toHaveBeenCalledWith(
+    'issue-77',
+    'https://example.com/original-video'
+  );
+  expect(handleReportMessage).not.toHaveBeenCalled();
+  expect(lineClient.post).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      messages: [
+        expect.objectContaining({
+          type: 'template',
+          altText: expect.stringContaining('影片內容'),
+        }),
+      ],
+    })
+  );
+});
+
+it('keeps asking for a media source when the text has no URL', async () => {
+  redisGet.mockImplementationOnce(() =>
+    Promise.resolve({
+      sessionId: NOW,
+      msgs: [],
+      awaitingMediaSource: { issueId: 'issue-78', inputType: 'image' },
+    })
+  );
+
+  await singleUserHandler(userId, createTextMessageEvent('沒有貼連結'));
+  await sleep(500);
+
+  expect(Issue.setOriginalSourceUrl).not.toHaveBeenCalled();
+  expect(lineClient.post).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({
+      messages: [
+        {
+          type: 'text',
+          text: '請附上有效的原始來源連結（需以 http:// 或 https:// 開頭）。',
+        },
+      ],
+    })
+  );
 });

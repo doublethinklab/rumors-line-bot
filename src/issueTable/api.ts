@@ -1,10 +1,16 @@
 import Router from 'koa-router';
 import getRawBody from 'raw-body';
-import Issue, { IssueComment, IssueStatus, Investigator } from 'src/database/models/issue';
+import Issue, {
+  IssueComment,
+  IssueStatus,
+  Investigator,
+} from 'src/database/models/issue';
 import Account, { AccountStatus } from 'src/database/models/account';
 import LineUser, { LineUserRole } from 'src/database/models/lineUser';
 import { updateIssueRow } from 'src/lib/sheets';
 import { upsertFromMessage } from 'src/lib/issueService';
+import lineClient from 'src/webhook/lineClient';
+import { createFacebookPostBroadcast } from 'src/webhook/handlers/reportFlow';
 
 const router = new Router();
 
@@ -36,6 +42,22 @@ function requireAdmin(ctx: any, next: () => Promise<void>) {
     return;
   }
   return next();
+}
+
+/** Allows an admin session or an external publisher carrying the shared token. */
+function requireBroadcastAuth(ctx: any, next: () => Promise<void>) {
+  if (ctx.session?.investigator?.role === 'admin') return next();
+
+  const configuredToken = process.env.SOCIAL_BROADCAST_TOKEN;
+  if (
+    configuredToken &&
+    ctx.get('authorization') === `Bearer ${configuredToken}`
+  ) {
+    return next();
+  }
+
+  ctx.status = 401;
+  ctx.body = { error: 'Unauthorized' };
 }
 
 function requireEditor(ctx: any, next: () => Promise<void>) {
@@ -83,9 +105,9 @@ router.post('/issues', requireAdmin, async (ctx: any) => {
 
   // Attach analyst note if provided
   if (notes?.trim() && issue._id) {
-    const col = await (
-      await import('src/database/mongoClient')
-    ).default.getInstance().then((c: any) => c.collection('issues'));
+    const col = await (await import('src/database/mongoClient')).default
+      .getInstance()
+      .then((c: any) => c.collection('issues'));
     await col.updateOne(
       { _id: issue._id },
       { $set: { analystNotes: notes.trim(), updatedAt: new Date() } }
@@ -97,7 +119,12 @@ router.post('/issues', requireAdmin, async (ctx: any) => {
   ctx.body = issue;
 });
 
-const VALID_STATUSES: IssueStatus[] = ['new', 'processing', 'resolved', 'cofacts_resolved'];
+const VALID_STATUSES: IssueStatus[] = [
+  'new',
+  'processing',
+  'resolved',
+  'cofacts_resolved',
+];
 
 router.patch('/issues/:id/status', requireEditor, async (ctx: any) => {
   const body = await parseJsonBody(ctx);
@@ -185,6 +212,40 @@ router.post('/issues/:id/comments', requireEditor, async (ctx: any) => {
   ctx.body = issue;
 });
 
+// Called by the DTL publishing workflow after a Facebook post goes live.
+router.post('/facebook-broadcast', requireBroadcastAuth, async (ctx: any) => {
+  const body = await parseJsonBody(ctx);
+  const postUrl = typeof body.postUrl === 'string' ? body.postUrl.trim() : '';
+
+  let url: URL;
+  try {
+    url = new URL(postUrl);
+  } catch {
+    ctx.status = 400;
+    ctx.body = { error: 'A valid Facebook postUrl is required' };
+    return;
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  if (
+    url.protocol !== 'https:' ||
+    !['facebook.com', 'www.facebook.com', 'm.facebook.com', 'fb.com'].includes(
+      hostname
+    )
+  ) {
+    ctx.status = 400;
+    ctx.body = { error: 'A valid Facebook postUrl is required' };
+    return;
+  }
+
+  await lineClient.post('/message/broadcast', {
+    messages: [createFacebookPostBroadcast(postUrl)],
+  });
+
+  ctx.status = 202;
+  ctx.body = { ok: true };
+});
+
 // ── Accounts ──────────────────────────────────────────────────────────────────
 
 router.get('/accounts', requireAuth, async (ctx) => {
@@ -225,8 +286,7 @@ router.get('/accounts/:id/issues', requireAdmin, async (ctx: any) => {
   }
   const issues = await Issue.findAll();
   ctx.body = issues.filter(
-    (i) =>
-      i.platform === account.platform && i.accountHandle === account.handle
+    (i) => i.platform === account.platform && i.accountHandle === account.handle
   );
 });
 

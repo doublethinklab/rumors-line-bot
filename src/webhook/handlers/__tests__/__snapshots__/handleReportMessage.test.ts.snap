@@ -1,0 +1,49 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`acks a link report and asks for advanced description, naming the platform 1`] = `
+Array [
+  Object {
+    "text": "小幫鼠收到「連結」，來自「Facebook」平台，感謝回報！
+會由 DTL 團隊進行後續分析。",
+    "type": "text",
+  },
+  Object {
+    "altText": "您是否願意針對您提供的訊息做進階描述，以便分析團隊做後續判斷。
+請選擇「是」或「否」。",
+    "template": Object {
+      "actions": Array [
+        Object {
+          "data": "{\\"input\\":{\\"choice\\":\\"yes\\",\\"issueId\\":\\"issue-2\\"},\\"sessionId\\":1000,\\"state\\":\\"ASKING_ADVANCED_DESCRIPTION\\"}",
+          "displayText": "是",
+          "label": "是",
+          "type": "postback",
+        },
+        Object {
+          "data": "{\\"input\\":{\\"choice\\":\\"no\\",\\"issueId\\":\\"issue-2\\"},\\"sessionId\\":1000,\\"state\\":\\"ASKING_ADVANCED_DESCRIPTION\\"}",
+          "displayText": "否",
+          "label": "否",
+          "type": "postback",
+        },
+      ],
+      "text": "您是否願意針對您提供的訊息做進階描述，以便分析團隊做後續判斷。
+請選擇「是」或「否」。",
+      "type": "confirm",
+    },
+    "type": "template",
+  },
+]
+`;
+
+exports[`acks a plain text report without asking for advanced description 1`] = `
+Array [
+  Object {
+    "text": "小幫鼠收到「文字訊息」，感謝回報！
+會由 DTL 團隊進行後續分析。",
+    "type": "text",
+  },
+  Object {
+    "text": "可以繼續回報新的可疑資訊囉！",
+    "type": "text",
+  },
+]
+`;

@@ -1,18 +1,9 @@
-import stringSimilarity from 'string-similarity';
 import Issue, { IssueDocument } from 'src/database/models/issue';
 import Account from 'src/database/models/account';
 import { extractUrls, parseUrl } from './urlParser';
 import { checkUrlSafety } from './urlSafety';
 import { scrapeQueue } from './queues';
-import { appendIssueRow, updateIssueRow } from './sheets';
-
-const SIMILARITY_THRESHOLD = 0.7;
-
-/** Re-reads an issue and pushes its current fields to its sheet row (add-reporter/dedup paths). */
-async function resyncIssueRow(id: import('mongodb').ObjectId): Promise<void> {
-  const issue = await Issue.findById(String(id));
-  if (issue) await updateIssueRow(issue);
-}
+import { appendIssueRow } from './sheets';
 
 export async function upsertFromMessage(
   text: string,
@@ -35,26 +26,15 @@ async function upsertFromLink(
   reporterUserId: string,
   messageText?: string
 ): Promise<IssueDocument> {
-  // 1. Exact URL match
-  const existing = await Issue.findByUrl(rawUrl);
-  if (existing) {
-    const id = existing._id!;
-    await Issue.addReporter(id, reporterUserId);
-    resyncIssueRow(id).catch((err) =>
-      console.error('[sheets] Sync failed:', err)
-    );
-    return existing;
-  }
-
   const parsed = parseUrl(rawUrl);
 
-  // 2. Safety check (whitelisted sites skip the API call)
+  // 1. Safety check (whitelisted sites skip the API call)
   const safety = await checkUrlSafety(rawUrl).catch((err) => {
     console.error('[issueService] URL safety check failed:', err);
     return { safe: true, whitelisted: false }; // Fail open
   });
 
-  // 3. Resolve account record for known social platforms
+  // 2. Resolve account record for known social platforms
   let accountId: import('mongodb').ObjectId | undefined;
   let accountDiscontinued = false;
 
@@ -74,29 +54,8 @@ async function upsertFromLink(
     }
   }
 
-  // 4. Same account already has an issue — bump reporter count
-  // Skip for account page URLs: they should create their own issue even if an article issue exists
-  if (
-    !parsed.isUnknownSite &&
-    parsed.platform &&
-    parsed.accountHandle &&
-    !parsed.isAccountPage
-  ) {
-    const sameAccount = await Issue.findByAccount(
-      parsed.platform,
-      parsed.accountHandle
-    );
-    if (sameAccount) {
-      const id = sameAccount._id!;
-      await Issue.addReporter(id, reporterUserId);
-      resyncIssueRow(id).catch((err) =>
-        console.error('[sheets] Sync failed:', err)
-      );
-      return sameAccount;
-    }
-  }
-
-  // 5. Create new issue
+  // 3. Create one issue per report. Even an identical URL must get its own row:
+  // otherwise a later reporter's description overwrites the earlier report.
   // Scrape when: not discontinued AND URL is safe (both known platforms and whitelisted/safe unknown sites)
   const shouldScrape = !accountDiscontinued && safety.safe;
 
@@ -147,27 +106,6 @@ async function upsertFromText(
   text: string,
   reporterUserId: string
 ): Promise<IssueDocument> {
-  const issues = await Issue.findAll();
-  const textIssues = issues.filter((i) => i.inputType === 'text');
-
-  if (textIssues.length > 0) {
-    const canonicalTexts = textIssues.map((i) => i.canonicalText);
-    const { bestMatch, bestMatchIndex } = stringSimilarity.findBestMatch(
-      text,
-      canonicalTexts
-    );
-
-    if (bestMatch.rating >= SIMILARITY_THRESHOLD) {
-      const match = textIssues[bestMatchIndex];
-      const id = match._id!;
-      await Issue.addReporter(id, reporterUserId);
-      resyncIssueRow(id).catch((err) =>
-        console.error('[sheets] Sync failed:', err)
-      );
-      return match;
-    }
-  }
-
   const newIssue = await Issue.createText(text, reporterUserId);
 
   appendIssueRow(newIssue).catch((err) =>

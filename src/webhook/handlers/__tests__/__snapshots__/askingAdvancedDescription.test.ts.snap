@@ -1,0 +1,19 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`asks for the description text and remembers the issue id when the user chooses 是 1`] = `
+Array [
+  Object {
+    "text": "請用「文字」描述您回傳之訊息。",
+    "type": "text",
+  },
+]
+`;
+
+exports[`replies with the decline message when the user chooses 否 1`] = `
+Array [
+  Object {
+    "text": "收到，可以繼續回報新的可疑資訊囉！",
+    "type": "text",
+  },
+]
+`;

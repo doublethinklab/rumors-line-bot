@@ -2,6 +2,7 @@ import type { Message, MessageEvent } from '@line/bot-sdk';
 
 export type ChatbotState =
   | '__INIT__'
+  | 'ASKING_MEDIA_SOURCE'
   | 'ASKING_ADVANCED_DESCRIPTION'
   | 'CONTINUE' // quick reply from reply token collection
   | 'Error';
@@ -42,6 +43,16 @@ export type Context = {
    * instead of a new report.
    */
   awaitingDescriptionForIssueId?: string;
+
+  /**
+   * Set when the reporter agrees to provide an image/video's original source.
+   * The next text message must contain the source URL before the description
+   * question is shown.
+   */
+  awaitingMediaSource?: {
+    issueId: string;
+    inputType: 'image' | 'video';
+  };
 };
 
 /** Latest reply token in Redis that is not consumed yet */
@@ -56,6 +67,8 @@ export type CooccurredMessage = {
 } & (
   | {
       type: Extract<MessageEvent['message']['type'], 'video' | 'image'>;
+      /** Present when a video was uploaded through LINE's file picker. */
+      originalFileName?: string;
     }
   | {
       type: Extract<MessageEvent['message']['type'], 'text'>;

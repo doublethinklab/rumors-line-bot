@@ -252,13 +252,7 @@
     <p class="analyst-notes">{issue.analystNotes}</p>
   {/if}
 
-  <!-- AI summary (shown when available) -->
-  {#if issue.aiSummary}
-    <details class="summary-block">
-      <summary>AI 摘要</summary>
-      <p class="summary-text">{issue.aiSummary}</p>
-    </details>
-  {:else if issue.scrapeStatus === 'pending'}
+  {#if issue.scrapeStatus === 'pending'}
     <p class="scrape-pending">分析中…</p>
   {:else if issue.scrapeStatus === 'failed'}
     <p class="scrape-failed">無法擷取內容</p>
@@ -607,28 +601,6 @@
   .btn-primary { background: #06c755; color: #fff; }
   .btn-secondary { background: #e0e0e0; color: #333; }
   .btn-move { background: #4a90d9; color: #fff; margin-left: auto; }
-
-  .summary-block {
-    margin-bottom: 8px;
-    font-size: 12px;
-  }
-
-  .summary-block summary {
-    cursor: pointer;
-    color: #555;
-    user-select: none;
-  }
-
-  .summary-text {
-    margin: 4px 0 0;
-    line-height: 1.5;
-    color: #333;
-    background: #f9f9f9;
-    border-left: 3px solid #4a90d9;
-    padding: 6px 8px;
-    border-radius: 0 4px 4px 0;
-    white-space: pre-wrap;
-  }
 
   .scrape-pending {
     font-size: 11px;

@@ -260,6 +260,22 @@ You can test the built image locally using the `docker-compose.yml`; just uncomm
 
 For production, please see [rumors-deploy](https://github.com/cofacts/rumors-deploy/) for sample `docker-coompose.yml` that runs such image.
 
+### Facebook post broadcast hook
+
+Set `SOCIAL_BROADCAST_TOKEN` to a private shared token. After DTL publishes a
+Facebook post, the publishing workflow can notify every LINE friend through:
+
+```http
+POST /api/issues/facebook-broadcast
+Authorization: Bearer <SOCIAL_BROADCAST_TOKEN>
+Content-Type: application/json
+
+{"postUrl":"https://www.facebook.com/..."}
+```
+
+The same endpoint can also be called from an authenticated issue-table admin
+session. It only accepts HTTPS Facebook URLs.
+
 ## Google Tag Manager
 
 We push variables and events in Google Tag Manager's `dataLayer` when the user interacts with LIFF.

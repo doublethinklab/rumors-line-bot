@@ -1,0 +1,69 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`uploads a video to Drive, creates an issue, and asks for advanced description 1`] = `
+Array [
+  Object {
+    "text": "小幫鼠收到「影片」，感謝回報！
+會由 DTL 團隊進行後續分析。",
+    "type": "text",
+  },
+  Object {
+    "altText": "您是否願意提供該影片的原始來源，
+請選擇「是」或「否」。",
+    "template": Object {
+      "actions": Array [
+        Object {
+          "data": "{\\"input\\":{\\"issueId\\":\\"issue-id-2\\",\\"inputType\\":\\"video\\",\\"choice\\":\\"yes\\"},\\"sessionId\\":1577836800000,\\"state\\":\\"ASKING_MEDIA_SOURCE\\"}",
+          "displayText": "是",
+          "label": "是",
+          "type": "postback",
+        },
+        Object {
+          "data": "{\\"input\\":{\\"issueId\\":\\"issue-id-2\\",\\"inputType\\":\\"video\\",\\"choice\\":\\"no\\"},\\"sessionId\\":1577836800000,\\"state\\":\\"ASKING_MEDIA_SOURCE\\"}",
+          "displayText": "否",
+          "label": "否",
+          "type": "postback",
+        },
+      ],
+      "text": "您是否願意提供該影片的原始來源，
+請選擇「是」或「否」。",
+      "type": "confirm",
+    },
+    "type": "template",
+  },
+]
+`;
+
+exports[`uploads an image to Drive, creates an issue, and asks for advanced description 1`] = `
+Array [
+  Object {
+    "text": "小幫鼠收到「圖片」，感謝回報！
+會由 DTL 團隊進行後續分析。",
+    "type": "text",
+  },
+  Object {
+    "altText": "您是否願意提供該圖片的原始來源，
+請選擇「是」或「否」。",
+    "template": Object {
+      "actions": Array [
+        Object {
+          "data": "{\\"input\\":{\\"issueId\\":\\"issue-id-1\\",\\"inputType\\":\\"image\\",\\"choice\\":\\"yes\\"},\\"sessionId\\":1577836800000,\\"state\\":\\"ASKING_MEDIA_SOURCE\\"}",
+          "displayText": "是",
+          "label": "是",
+          "type": "postback",
+        },
+        Object {
+          "data": "{\\"input\\":{\\"issueId\\":\\"issue-id-1\\",\\"inputType\\":\\"image\\",\\"choice\\":\\"no\\"},\\"sessionId\\":1577836800000,\\"state\\":\\"ASKING_MEDIA_SOURCE\\"}",
+          "displayText": "否",
+          "label": "否",
+          "type": "postback",
+        },
+      ],
+      "text": "您是否願意提供該圖片的原始來源，
+請選擇「是」或「否」。",
+      "type": "confirm",
+    },
+    "type": "template",
+  },
+]
+`;

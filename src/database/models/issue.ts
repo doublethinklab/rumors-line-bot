@@ -53,6 +53,8 @@ export interface IssueDocument {
   scrapedAt?: Date;
   // reporter-submitted free-text description, collected after the report is made
   reporterDescription?: string;
+  // reporter-submitted original source for an uploaded image/video
+  originalSourceUrl?: string;
   // free text that accompanied a URL in the same message (link issues only)
   messageText?: string;
   // row number (1-indexed) of this issue in the Issues sheet, set after the first append
@@ -167,6 +169,17 @@ const Issue = {
     await col.updateOne(
       { _id: new ObjectId(id) },
       { $set: { reporterDescription: description, updatedAt: new Date() } }
+    );
+  },
+
+  async setOriginalSourceUrl(
+    id: string,
+    originalSourceUrl: string
+  ): Promise<void> {
+    const col = await getCollection();
+    await col.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { originalSourceUrl, updatedAt: new Date() } }
     );
   },
 
