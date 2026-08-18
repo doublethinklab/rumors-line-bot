@@ -22,15 +22,18 @@ const mockUpsertFromMedia = upsertFromMedia as jest.MockedFunction<
 >;
 
 beforeEach(() => {
+  MockDate.set('2020-01-01');
   ga.clearAllMocks();
   lineClient.post.mockClear();
   mockUploadToDrive.mockReset();
   mockUpsertFromMedia.mockReset();
 });
 
-it('uploads an image to Drive, creates an issue, and asks for advanced description', async () => {
-  MockDate.set('2020-01-01');
+afterEach(() => {
+  MockDate.reset();
+});
 
+it('uploads an image to Drive, creates an issue, and asks for advanced description', async () => {
   lineClient.getContent.mockResolvedValueOnce({
     headers: new Map([['content-type', 'image/png']]),
     arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
@@ -46,8 +49,6 @@ it('uploads an image to Drive, creates an issue, and asks for advanced descripti
     { type: 'image', id: 'msg-1' },
     'user-1'
   );
-
-  MockDate.reset();
 
   expect(mockUploadToDrive).toHaveBeenCalledWith(
     expect.stringContaining('msg-1'),
@@ -90,4 +91,33 @@ it('uploads a video to Drive, creates an issue, and asks for advanced descriptio
     'user-1'
   );
   expect(result.replies).toMatchSnapshot();
+});
+
+it('accepts a video uploaded as a file and derives its MIME type from the filename', async () => {
+  lineClient.getContent.mockResolvedValueOnce({
+    headers: new Map([['content-type', 'application/octet-stream']]),
+    arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+  } as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+  mockUploadToDrive.mockResolvedValueOnce(
+    'https://drive.google.com/file/d/file-video/view'
+  );
+  mockUpsertFromMedia.mockResolvedValueOnce({
+    _id: 'issue-id-3',
+  } as unknown as IssueDocument);
+
+  await handleMediaReport(
+    { type: 'video', id: 'msg-3', originalFileName: '我的影片.mov' },
+    'user-1'
+  );
+
+  expect(mockUploadToDrive).toHaveBeenCalledWith(
+    expect.stringContaining('_msg-3_'),
+    expect.any(Buffer),
+    'video/quicktime'
+  );
+  expect(mockUpsertFromMedia).toHaveBeenCalledWith(
+    'video',
+    'https://drive.google.com/file/d/file-video/view',
+    'user-1'
+  );
 });

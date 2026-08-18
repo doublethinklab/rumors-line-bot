@@ -14,14 +14,18 @@ import lineClient from 'src/webhook/lineClient';
 import UserSettings from 'src/database/models/userSettings';
 import Issue from 'src/database/models/issue';
 import { updateIssueRow } from 'src/lib/sheets';
+import { extractUrls } from 'src/lib/urlParser';
 
 import askingAdvancedDescription from './askingAdvancedDescription';
+import askingMediaSource from './askingMediaSource';
 import handleReportMessage from './handleReportMessage';
 import processBatch from './processBatch';
 import {
   createWelcomeMessages,
   createUnsupportedTypeReply,
   createDescriptionReceivedReply,
+  createAdvancedDescriptionPrompt,
+  createInvalidMediaSourceReply,
 } from './reportFlow';
 import {
   setReplyToken,
@@ -37,6 +41,17 @@ const userIdBlacklist = (process.env.USERID_BLACKLIST || '').split(',');
  * The amount of time to wait for the next message to arrive before processing the batch.
  */
 const TIMEOUT_BEFORE_PROCESSING = 500; // ms
+
+const SUPPORTED_VIDEO_FILE_EXTENSIONS = new Set([
+  'avi',
+  'm4v',
+  'mkv',
+  'mov',
+  'mp4',
+  'mpeg',
+  'mpg',
+  'webm',
+]);
 
 // A symbol that is used to prevent accidental return in singleUserHandler.
 // It should only be used when timeout are correctly handled.
@@ -247,6 +262,10 @@ const singleUserHandler = async (
         );
       }
 
+      if (postbackData.state === 'ASKING_MEDIA_SOURCE') {
+        return send(await askingMediaSource({ context, postbackData, userId }));
+      }
+
       return cancel();
     }
 
@@ -258,8 +277,35 @@ const singleUserHandler = async (
   // We have message events left.
   //
   switch (webhookEvent.message.type) {
+    case 'file': {
+      const extension = webhookEvent.message.fileName
+        .split('.')
+        .pop()
+        ?.toLowerCase();
+
+      if (extension && SUPPORTED_VIDEO_FILE_EXTENSIONS.has(extension)) {
+        return addMsgToBatch({
+          type: 'video',
+          id: webhookEvent.message.id,
+          originalFileName: webhookEvent.message.fileName,
+        });
+      }
+
+      ga(userId)
+        .event({
+          ec: 'UserInput',
+          ea: 'MessageType',
+          el: webhookEvent.message.type,
+        })
+        .send();
+      return send({
+        context: await setNewContext(userId),
+        replies: createUnsupportedTypeReply(),
+      });
+    }
+
     default: {
-      // Unsupported message type (sticker, file, location, audio, etc.) — Scenario 7
+      // Unsupported message type (sticker, non-video file, location, audio, etc.) — Scenario 7
       ga(userId)
         .event({
           ec: 'UserInput',
@@ -299,6 +345,35 @@ const singleUserHandler = async (
 
     default: {
       const trimmedInput = webhookEvent.message.text.trim();
+
+      if (context.awaitingMediaSource) {
+        const urls = extractUrls(trimmedInput);
+        if (urls.length === 0) {
+          return send({
+            context,
+            replies: createInvalidMediaSourceReply(),
+          });
+        }
+
+        const { issueId, inputType } = context.awaitingMediaSource;
+        await Issue.setOriginalSourceUrl(issueId, urls[0]);
+        Issue.findById(issueId)
+          .then((issue) => issue && updateIssueRow(issue))
+          .catch((err) => console.error('[sheets] Sync failed:', err));
+
+        const nextContext: Context = { ...context };
+        delete nextContext.awaitingMediaSource;
+        return send({
+          context: nextContext,
+          replies: [
+            createAdvancedDescriptionPrompt(
+              issueId,
+              nextContext.sessionId,
+              inputType === 'image' ? '圖片內容' : '影片內容'
+            ),
+          ],
+        });
+      }
 
       if (context.awaitingDescriptionForIssueId) {
         // The user is replying with the advanced description they agreed to provide.

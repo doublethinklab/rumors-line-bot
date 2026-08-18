@@ -81,7 +81,12 @@ function buildIssueRow(issue: IssueDocument): (string | number)[] {
     : issue.inputType === 'link'
     ? issue.messageText ?? ''
     : issue.canonicalText;
-  const url = issue.inputType === 'link' ? issue.canonicalText : '';
+  const url =
+    issue.inputType === 'link'
+      ? issue.canonicalText
+      : isMedia
+      ? issue.originalSourceUrl ?? ''
+      : '';
   const archive = isMedia
     ? issue.canonicalText
     : issue.inputType === 'link'

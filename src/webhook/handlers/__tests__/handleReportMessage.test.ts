@@ -3,7 +3,6 @@ jest.mock('../processMedia', () => jest.fn());
 
 import MockDate from 'mockdate';
 import type { IssueDocument } from 'src/database/models/issue';
-import redis from 'src/lib/redisClient';
 import handleReportMessage from '../handleReportMessage';
 import { upsertFromMessage } from 'src/lib/issueService';
 import originalHandleMediaReport from '../processMedia';
@@ -15,17 +14,17 @@ const handleMediaReport = originalHandleMediaReport as jest.MockedFunction<
   typeof originalHandleMediaReport
 >;
 
-afterAll(async () => {
-  await redis.quit();
-});
-
 beforeEach(() => {
+  MockDate.set(1000);
   mockUpsertFromMessage.mockReset();
   handleMediaReport.mockReset();
 });
 
+afterEach(() => {
+  MockDate.reset();
+});
+
 it('acks a plain text report without asking for advanced description', async () => {
-  MockDate.set(1000);
   mockUpsertFromMessage.mockResolvedValueOnce({
     _id: 'issue-1',
   } as unknown as IssueDocument);
@@ -34,8 +33,6 @@ it('acks a plain text report without asking for advanced description', async () 
     { id: 'm1', type: 'text', text: 'hello world' },
     'user-1'
   );
-  MockDate.reset();
-
   expect(mockUpsertFromMessage).toHaveBeenCalledWith('hello world', 'user-1');
   expect(result.replies).toMatchSnapshot();
 });

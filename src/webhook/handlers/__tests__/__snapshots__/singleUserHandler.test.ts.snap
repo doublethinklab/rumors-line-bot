@@ -1,5 +1,22 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`dispatches ASKING_ADVANCED_DESCRIPTION postbacks with a matching session id 1`] = `
+Array [
+  Array [
+    "/message/reply",
+    Object {
+      "messages": Array [
+        Object {
+          "text": "請用「文字」描述您回傳之訊息。",
+          "type": "text",
+        },
+      ],
+      "replyToken": "reply-token",
+    },
+  ],
+]
+`;
+
 exports[`handles follow and unfollow event: User settings should have notification turned on 1`] = `
 Array [
   Object {
@@ -8,5 +25,83 @@ Array [
     "createdAt": 2019-07-01T12:00:00.000Z,
     "userId": "U4af4980629",
   },
+]
+`;
+
+exports[`rejects postbacks whose session id no longer matches 1`] = `
+Array [
+  Array [
+    "/message/reply",
+    Object {
+      "messages": Array [
+        Object {
+          "text": "🚧 您目前有其他新的回報正在進行，這個按鈕已經失效囉。",
+          "type": "text",
+        },
+      ],
+      "replyToken": "reply-token",
+    },
+  ],
+]
+`;
+
+exports[`replies with the unsupported-type message for sticker events 2`] = `
+Array [
+  Array [
+    "/message/reply",
+    Object {
+      "messages": Array [
+        Object {
+          "text": "很抱歉，小幫鼠不收集您回傳的訊息類型！
+請傳以下類型的訊息，如：文字、連結、圖片、影片。",
+          "type": "text",
+        },
+        Object {
+          "text": "可以繼續回報新的可疑資訊囉！",
+          "type": "text",
+        },
+      ],
+      "replyToken": "nHuyWiB7yP5Zw52FIkcQobQuGDXCTA",
+    },
+  ],
+]
+`;
+
+exports[`reports a single text message via handleReportMessage 3`] = `
+Array [
+  Array [
+    "/message/reply",
+    Object {
+      "messages": Array [
+        Object {
+          "text": "Replies here",
+          "type": "text",
+        },
+      ],
+      "replyToken": "",
+    },
+  ],
+]
+`;
+
+exports[`treats the reply as an advanced description when one is pending 1`] = `
+Array [
+  Array [
+    "/message/reply",
+    Object {
+      "messages": Array [
+        Object {
+          "text": "小幫鼠收到進階描述，感謝回報！
+會由 DTL 團隊進行後續分析。",
+          "type": "text",
+        },
+        Object {
+          "text": "可以繼續回報新的可疑資訊囉！",
+          "type": "text",
+        },
+      ],
+      "replyToken": "",
+    },
+  ],
 ]
 `;

@@ -16,6 +16,7 @@ import {
 import redis from 'src/lib/redisClient';
 
 import type { AdvancedDescriptionInput } from './askingAdvancedDescription';
+import type { MediaSourceInput } from './askingMediaSource';
 import lineClient from '../lineClient';
 
 /**
@@ -23,6 +24,7 @@ import lineClient from '../lineClient';
  */
 type StateInputMap = {
   __INIT__: never;
+  ASKING_MEDIA_SOURCE: MediaSourceInput;
   ASKING_ADVANCED_DESCRIPTION: AdvancedDescriptionInput;
   CONTINUE: never;
   Error: unknown;

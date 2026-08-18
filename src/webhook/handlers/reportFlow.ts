@@ -2,6 +2,7 @@ import type { Message } from '@line/bot-sdk';
 import type { Platform } from 'src/lib/urlParser';
 import { createPostbackAction } from './utils';
 import type { AdvancedDescriptionInput } from './askingAdvancedDescription';
+import type { MediaSourceInput } from './askingMediaSource';
 
 export const PLATFORM_DISPLAY_NAME: Record<Platform, string> = {
   facebook: 'Facebook',
@@ -37,10 +38,11 @@ export function createWelcomeMessages(): Message[] {
       text: `在此請依照以下規範回報可疑資訊：
 
 1. 請一次只傳一則訊息，若有一則以上的訊息（e.g., 連結、圖片、影片）需要回報，請待系統提示後再傳下一則訊息。
-2. 請勿將本工具作為個人記事留言板
-3. ⭕️ 我們只接收如 a. 文字、b. 連結、c. 圖片、d. 影片 等訊息類型。
-4. ❌ 我們不接收以下類型資訊如：a. 貼圖、b. pdf 檔、c. xls 檔、d. ppt 檔、etc…
-5. 本機器人所收集之可疑訊息，僅供學術研究與數位輿情分析之用。我們絕不收集、亦不留存您的個人資料（如 LINE 帳號、大頭貼、個資等），所有回報內容將以去識別化方式進行分析，請安心回報。`,
+2. 請勿將本工具作為個人記事留言板。
+3. 請勿將個人私密影像內容上傳到本工具。
+4. ⭕️ 我們只接收如 a. 文字、b. 連結、c. 圖片、d. 影片 等訊息類型。
+5. ❌ 我們不接收以下類型資訊如：a. 貼圖、b. pdf 檔、c. xls 檔、d. ppt 檔、etc…
+6. 本機器人所收集之可疑訊息，僅供學術研究與數位輿情分析之用。我們絕不收集、亦不留存您的個人資料（如 LINE 帳號、大頭貼、個資等），所有回報內容將以去識別化方式進行分析，請安心回報。`,
     },
     {
       type: 'text',
@@ -72,6 +74,58 @@ export function createMediaReceivedAck(inputType: 'image' | 'video'): Message {
     type: 'text',
     text: `小幫鼠收到「${label}」，感謝回報！\n會由 DTL 團隊進行後續分析。`,
   };
+}
+
+/** Scenario 5/6 Q1: ask for the uploaded media's original source. */
+export function createMediaSourcePrompt(
+  issueId: string,
+  inputType: 'image' | 'video',
+  sessionId: number
+): Message {
+  const label = inputType === 'image' ? '圖片' : '影片';
+  const text = `您是否願意提供該${label}的原始來源，\n請選擇「是」或「否」。`;
+  const input = { issueId, inputType };
+
+  return {
+    type: 'template',
+    altText: text,
+    template: {
+      type: 'confirm',
+      text,
+      actions: [
+        createPostbackAction<'ASKING_MEDIA_SOURCE'>(
+          '是',
+          { ...input, choice: 'yes' } satisfies MediaSourceInput,
+          '是',
+          sessionId,
+          'ASKING_MEDIA_SOURCE'
+        ),
+        createPostbackAction<'ASKING_MEDIA_SOURCE'>(
+          '否',
+          { ...input, choice: 'no' } satisfies MediaSourceInput,
+          '否',
+          sessionId,
+          'ASKING_MEDIA_SOURCE'
+        ),
+      ],
+    },
+  };
+}
+
+export function createAskForMediaSourceReply(
+  inputType: 'image' | 'video'
+): Message[] {
+  const label = inputType === 'image' ? '圖片' : '影片';
+  return [{ type: 'text', text: `請附上該${label}原始來源（請附上連結）。` }];
+}
+
+export function createInvalidMediaSourceReply(): Message[] {
+  return [
+    {
+      type: 'text',
+      text: '請附上有效的原始來源連結（需以 http:// 或 https:// 開頭）。',
+    },
+  ];
 }
 
 /**
